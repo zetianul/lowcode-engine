@@ -1,7 +1,6 @@
-import { INode } from '../document';
+import type { IDocumentModel, INode } from '../document';
 import { ILocateEvent } from './dragon';
 import {
-  IPublicModelDocumentModel,
   IPublicModelDropLocation,
   IPublicTypeLocationDetailType,
   IPublicTypeRect,
@@ -99,13 +98,13 @@ function isDocument(elem: any): elem is Document {
 export function getWindow(elem: Element | Document): Window {
   return (isDocument(elem) ? elem : elem.ownerDocument!).defaultView!;
 }
-export interface IDropLocation extends Omit< IPublicModelDropLocation, 'target' | 'clone' > {
+export interface IDropLocation extends Omit<IPublicModelDropLocation, 'target' | 'clone'> {
 
   readonly source: string;
 
   get target(): INode;
 
-  get document(): IPublicModelDocumentModel;
+  get document(): IDocumentModel | null;
 
   clone(event: IPublicModelLocateEvent): IDropLocation;
 }
@@ -119,11 +118,11 @@ export class DropLocation implements IDropLocation {
 
   readonly source: string;
 
-  get document(): IPublicModelDocumentModel {
+  get document(): IDocumentModel | null {
     return this.target.document;
   }
 
-  constructor({ target, detail, source, event }: IPublicTypeLocationData) {
+  constructor({ target, detail, source, event }: IPublicTypeLocationData<INode>) {
     this.target = target;
     this.detail = detail;
     this.source = source;
@@ -159,7 +158,7 @@ export class DropLocation implements IDropLocation {
       if (this.detail.index <= 0) {
         return null;
       }
-      return this.target.children.get(this.detail.index - 1);
+      return this.target.children?.get(this.detail.index - 1);
     }
     return (this.detail as any)?.near?.node;
   }

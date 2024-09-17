@@ -62,11 +62,11 @@ delete(node: IPublicModelNode): boolean;
 
 ```typescript
 /**
- * 删除指定节点
- * delete the node
+ * 插入一个节点
+ * insert the node
  * @param node
  */
-delete(node: IPublicModelNode): boolean;
+insert(node: IPublicModelNode): boolean;
 ```
 
 相关类型：[IPublicModelNode](https://github.com/alibaba/lowcode-engine/blob/main/packages/types/src/shell/model/node.ts)
@@ -151,6 +151,21 @@ has(node: IPublicModelNode): boolean;
  * @param fn
  */
 forEach(fn: (node: IPublicModelNode, index: number) => void): void;
+
+```
+
+相关类型：[IPublicModelNode](https://github.com/alibaba/lowcode-engine/blob/main/packages/types/src/shell/model/node.ts)
+
+### reverse
+
+类似数组的 reverse
+
+```typescript
+/**
+ * 类似数组的 reverse
+ * provide the same function with {Array.prototype.reverse}
+ */
+reverse(): IPublicModelNode[];
 
 ```
 

@@ -2,7 +2,7 @@
 /* eslint-disable max-len */
 import { StrictEventEmitter } from 'strict-event-emitter-types';
 import { EventEmitter } from 'events';
-import { EventBus } from './event-bus';
+import { EventBus, IEventBus } from './event-bus';
 import {
   IPublicModelEditor,
   EditorConfig,
@@ -35,6 +35,10 @@ const keyBlacklist = [
   'innerPlugins',
 ];
 
+const AssetsCache: {
+  [key: string]: IPublicTypeRemoteComponentDescription;
+} = {};
+
 export declare interface Editor extends StrictEventEmitter<EventEmitter, GlobalEvent.EventConfig> {
   addListener(event: string | symbol, listener: (...args: any[]) => void): this;
   once(event: string | symbol, listener: (...args: any[]) => void): this;
@@ -52,15 +56,18 @@ export declare interface Editor extends StrictEventEmitter<EventEmitter, GlobalE
   eventNames(): Array<string | symbol>;
 }
 
+export interface IEditor extends IPublicModelEditor {
+  config?: EditorConfig;
+
+  components?: PluginClassSet;
+
+  eventBus: IEventBus;
+
+  init(config?: EditorConfig, components?: PluginClassSet): Promise<any>;
+}
+
 // eslint-disable-next-line no-redeclare
-export class Editor extends (EventEmitter as any) implements IPublicModelEditor {
-  constructor(readonly viewName: string = 'global', readonly workspaceMode: boolean = false) {
-    // eslint-disable-next-line constructor-super
-    super();
-    // set global emitter maxListeners
-    this.setMaxListeners(200);
-    this.eventBus = new EventBus(this);
-  }
+export class Editor extends EventEmitter implements IEditor {
 
   /**
    * Ioc Container
@@ -71,9 +78,31 @@ export class Editor extends (EventEmitter as any) implements IPublicModelEditor 
     return globalLocale.getLocale();
   }
 
+  config?: EditorConfig;
+
+  eventBus: EventBus;
+
+  components?: PluginClassSet;
+
   // readonly utils = utils;
 
   private hooks: HookConfig[] = [];
+
+  private waits = new Map<
+    IPublicTypeEditorValueKey,
+    Array<{
+      once?: boolean;
+      resolve: (data: any) => void;
+    }>
+  >();
+
+  constructor(readonly viewName: string = 'global', readonly workspaceMode: boolean = false) {
+    // eslint-disable-next-line constructor-super
+    super();
+    // set global emitter maxListeners
+    this.setMaxListeners(200);
+    this.eventBus = new EventBus(this);
+  }
 
   get<T = undefined, KeyOrType = any>(
       keyOrType: KeyOrType,
@@ -118,11 +147,18 @@ export class Editor extends (EventEmitter as any) implements IPublicModelEditor 
       // 如果有远程组件描述协议，则自动加载并补充到资产包中，同时出发 designer.incrementalAssetsReady 通知组件面板更新数据
       if (remoteComponentDescriptions && remoteComponentDescriptions.length) {
         await Promise.all(
-          remoteComponentDescriptions.map(async (component: any) => {
+          remoteComponentDescriptions.map(async (component: IPublicTypeRemoteComponentDescription) => {
             const { exportName, url, npm } = component;
-            await (new AssetLoader()).load(url);
+            if (!url || !exportName) {
+              return;
+            }
+            if (!AssetsCache[exportName] || !npm?.version || AssetsCache[exportName].npm?.version !== npm?.version) {
+              await (new AssetLoader()).load(url);
+            }
+            AssetsCache[exportName] = component;
             function setAssetsComponent(component: any, extraNpmInfo: any = {}) {
               const components = component.components;
+              assets.componentList = assets.componentList?.concat(component.componentList || []);
               if (Array.isArray(components)) {
                 components.forEach(d => {
                   assets.components = assets.components.concat({
@@ -144,7 +180,6 @@ export class Editor extends (EventEmitter as any) implements IPublicModelEditor 
                   ...component.components,
                 } || []);
               }
-              // assets.componentList = assets.componentList.concat(component.componentList || []);
             }
             function setArrayAssets(value: any[], preExportName: string = '', preSubName: string = '') {
               value.forEach((d: any, i: number) => {
@@ -156,14 +191,14 @@ export class Editor extends (EventEmitter as any) implements IPublicModelEditor 
                 });
               });
             }
-            if (window[exportName]) {
-              if (Array.isArray(window[exportName])) {
-                setArrayAssets(window[exportName] as any);
+            if ((window as any)[exportName]) {
+              if (Array.isArray((window as any)[exportName])) {
+                setArrayAssets((window as any)[exportName] as any);
               } else {
-                setAssetsComponent(window[exportName] as any);
+                setAssetsComponent((window as any)[exportName] as any);
               }
             }
-            return window[exportName];
+            return (window as any)[exportName];
           }),
         );
       }
@@ -190,25 +225,27 @@ export class Editor extends (EventEmitter as any) implements IPublicModelEditor 
     const x = this.context.get(keyOrType);
     if (x !== undefined) {
       fn(x);
-      return () => { };
-    } else {
-      this.setWait(keyOrType, fn);
-      return () => {
-        this.delWait(keyOrType, fn);
-      };
     }
+    this.setWait(keyOrType, fn);
+    return () => {
+      this.delWait(keyOrType, fn);
+    };
+  }
+
+  onChange<T = undefined, KeyOrType extends IPublicTypeEditorValueKey = any>(
+    keyOrType: KeyOrType,
+    fn: (data: IPublicTypeEditorGetResult<T, KeyOrType>) => void,
+  ): () => void {
+    this.setWait(keyOrType, fn);
+    return () => {
+      this.delWait(keyOrType, fn);
+    };
   }
 
   register(data: any, key?: IPublicTypeEditorValueKey): void {
     this.context.set(key || data, data);
     this.notifyGot(key || data);
   }
-
-  config?: EditorConfig;
-
-  eventBus: EventBus;
-
-  components?: PluginClassSet;
 
   async init(config?: EditorConfig, components?: PluginClassSet): Promise<any> {
     this.config = config || {};
@@ -271,16 +308,6 @@ export class Editor extends (EventEmitter as any) implements IPublicModelEditor 
       this.removeListener(message, handler);
     });
   };
-
-  /* eslint-disable */
-  private waits = new Map<
-    IPublicTypeEditorValueKey,
-    Array<{
-      once?: boolean;
-      resolve: (data: any) => void;
-    }>
-  >();
-  /* eslint-enable */
 
   private notifyGot(key: IPublicTypeEditorValueKey) {
     let waits = this.waits.get(key);

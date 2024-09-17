@@ -16,16 +16,15 @@ import {
   IPublicModelDropLocation,
   IPublicModelScroller,
   IPublicModelScrollTarget,
-  IPublicModelPluginContext,
   IPublicModelLocateEvent,
 } from '@alilc/lowcode-types';
 import TreeNode from './tree-node';
 import { IndentTrack } from '../helper/indent-track';
 import DwellTimer from '../helper/dwell-timer';
-import { ITreeBoard, TreeMaster } from './tree-master';
+import { IOutlinePanelPluginContext, ITreeBoard, TreeMaster } from './tree-master';
 
 export class PaneController implements IPublicModelSensor, ITreeBoard, IPublicTypeScrollable {
-  private pluginContext: IPublicModelPluginContext;
+  private pluginContext: IOutlinePanelPluginContext;
 
   private treeMaster?: TreeMaster;
 
@@ -100,8 +99,8 @@ export class PaneController implements IPublicModelSensor, ITreeBoard, IPublicTy
 
   private _shell: HTMLDivElement | null = null;
 
-  constructor(at: string | symbol, pluginContext: IPublicModelPluginContext, treeMaster: TreeMaster) {
-    this.pluginContext = pluginContext;
+  constructor(at: string | symbol, treeMaster: TreeMaster) {
+    this.pluginContext = treeMaster.pluginContext;
     this.treeMaster = treeMaster;
     this.at = at;
     let inited = false;
@@ -237,7 +236,7 @@ export class PaneController implements IPublicModelSensor, ITreeBoard, IPublicTy
         let { node } = treeNode;
         if (isDragNodeObject(dragObject)) {
           const newNodes = operationalNodes;
-          let i = newNodes.length;
+          let i = newNodes?.length;
           let p: any = node;
           while (i-- > 0) {
             if (newNodes[i].contains(p)) {
@@ -444,7 +443,7 @@ export class PaneController implements IPublicModelSensor, ITreeBoard, IPublicTy
       event: e,
       detail: {
         type: IPublicTypeLocationDetailType.Children,
-        index: index + 1,
+        index: (index || 0) + 1,
         valid: document?.checkNesting(node.parent!, dragObject as any),
         near: { node, pos: 'after' },
         focus: checkRecursion(focusNode, dragObject) ? { type: 'node', node: focusNode } : undefined,
@@ -482,7 +481,7 @@ export class PaneController implements IPublicModelSensor, ITreeBoard, IPublicTy
     const isSlotContainer = treeNode.hasSlots();
     const isContainer = treeNode.isContainer();
 
-    if (container.isSlot && !treeNode.expanded) {
+    if (container.isSlotNode && !treeNode.expanded) {
       // 未展开，直接定位到内部第一个节点
       if (isSlotContainer) {
         detail.index = null;
@@ -594,7 +593,7 @@ export class PaneController implements IPublicModelSensor, ITreeBoard, IPublicTy
           // at this moment, it is possible that pane is not ready yet, so
           // put ui related operations to the next loop
           setTimeout(() => {
-            tree.setNodeSelected(treeNode.id);
+            tree.setNodeSelected(treeNode.nodeId);
             this.scrollToNode(treeNode, null, 4);
           }, 0);
         }
@@ -616,21 +615,21 @@ export class PaneController implements IPublicModelSensor, ITreeBoard, IPublicTy
     if (!this._shell) {
       return undefined;
     }
-    return this._shell.querySelector(`.tree-node[data-id="${treeNode.id}"]`)?.getBoundingClientRect();
+    return this._shell.querySelector(`.tree-node[data-id="${treeNode.nodeId}"]`)?.getBoundingClientRect();
   }
 
   private getTreeTitleRect(treeNode: TreeNode): DOMRect | undefined {
     if (!this._shell) {
       return undefined;
     }
-    return this._shell.querySelector(`.tree-node-title[data-id="${treeNode.id}"]`)?.getBoundingClientRect();
+    return this._shell.querySelector(`.tree-node-title[data-id="${treeNode.nodeId}"]`)?.getBoundingClientRect();
   }
 
   private getTreeSlotsRect(treeNode: TreeNode): DOMRect | undefined {
     if (!this._shell) {
       return undefined;
     }
-    return this._shell.querySelector(`.tree-node-slots[data-id="${treeNode.id}"]`)?.getBoundingClientRect();
+    return this._shell.querySelector(`.tree-node-slots[data-id="${treeNode.nodeId}"]`)?.getBoundingClientRect();
   }
 }
 

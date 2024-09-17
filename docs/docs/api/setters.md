@@ -1,6 +1,6 @@
 ---
 title: setters - 设置器 API
-sidebar_position: 6
+sidebar_position: 10
 ---
 > **@types** [IPublicApiSetters](https://github.com/alibaba/lowcode-engine/blob/main/packages/types/src/shell/api/setters.ts)<br/>
 > **@since** v1.0.0
@@ -145,7 +145,7 @@ export default class AltStringSetter extends React.PureComponent<AltStringSetter
 ```typescript
 import AltStringSetter from './AltStringSetter';
 import { setters } from '@alilc/lowcode-engine';
-const { registerSetter } = registerSetter;
+const { registerSetter } = setters;
 registerSetter('AltStringSetter', AltStringSetter);
 ```
 注册之后，我们就可以在物料中使用了，其中核心配置如下：

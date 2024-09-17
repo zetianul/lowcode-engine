@@ -3,15 +3,21 @@ import {
   engineConfig, Setters as InnerSetters,
   Hotkey as InnerHotkey,
   commonEvent,
+  IEngineConfig,
+  IHotKey,
+  Command as InnerCommand,
 } from '@alilc/lowcode-editor-core';
 import {
   Designer,
   ILowCodePluginContextApiAssembler,
   LowCodePluginManager,
   ILowCodePluginContextPrivate,
-  Project as InnerProject,
+  IProject,
+  IDesigner,
+  ILowCodePluginManager,
 } from '@alilc/lowcode-designer';
 import {
+  ISkeleton,
   Skeleton as InnerSkeleton,
 } from '@alilc/lowcode-editor-skeleton';
 import {
@@ -25,42 +31,80 @@ import {
   Common,
   Logger,
   Workspace,
+  Window,
   Canvas,
+  CommonUI,
+  Command,
 } from '@alilc/lowcode-shell';
 import {
   IPluginPreferenceMananger,
+  IPublicApiCanvas,
+  IPublicApiCommon,
   IPublicApiEvent,
+  IPublicApiHotkey,
+  IPublicApiMaterial,
+  IPublicApiPlugins,
+  IPublicApiProject,
+  IPublicApiSetters,
+  IPublicApiSkeleton,
+  IPublicEnumPluginRegisterLevel,
   IPublicModelPluginContext,
   IPublicTypePluginMeta,
 } from '@alilc/lowcode-types';
-import { getLogger } from '@alilc/lowcode-utils';
-import { Workspace as InnerWorkspace } from '../workspace';
-import { EditorWindow } from '../window';
+import { getLogger, Logger as InnerLogger } from '@alilc/lowcode-utils';
+import { IWorkspace } from '../workspace';
+import { IEditorWindow } from '../window';
 
-export class BasicContext implements IPublicModelPluginContext {
-  skeleton: Skeleton;
-  plugins: Plugins;
-  project: Project;
-  setters: Setters;
-  material: Material;
-  common: Common;
-  config;
-  event;
-  logger;
-  hotkey: Hotkey;
-  innerProject: InnerProject;
+export interface IBasicContext extends Omit<IPublicModelPluginContext, 'workspace'> {
+  skeleton: IPublicApiSkeleton;
+  plugins: IPublicApiPlugins;
+  project: IPublicApiProject;
+  setters: IPublicApiSetters;
+  material: IPublicApiMaterial;
+  common: IPublicApiCommon;
+  config: IEngineConfig;
+  event: IPublicApiEvent;
+  logger: InnerLogger;
+  hotkey: IPublicApiHotkey;
+  innerProject: IProject;
   editor: Editor;
-  designer: Designer;
+  designer: IDesigner;
   registerInnerPlugins: () => Promise<void>;
   innerSetters: InnerSetters;
-  innerSkeleton: InnerSkeleton;
-  innerHotkey: InnerHotkey;
-  innerPlugins: LowCodePluginManager;
-  canvas: Canvas;
+  innerSkeleton: ISkeleton;
+  innerHotkey: IHotKey;
+  innerPlugins: ILowCodePluginManager;
+  canvas: IPublicApiCanvas;
   pluginEvent: IPublicApiEvent;
   preference: IPluginPreferenceMananger;
+  workspace: IWorkspace;
+}
 
-  constructor(innerWorkspace: InnerWorkspace, viewName: string, public editorWindow?: EditorWindow) {
+export class BasicContext implements IBasicContext {
+  skeleton: IPublicApiSkeleton;
+  plugins: IPublicApiPlugins;
+  project: IPublicApiProject;
+  setters: IPublicApiSetters;
+  material: IPublicApiMaterial;
+  common: IPublicApiCommon;
+  config: IEngineConfig;
+  event: IPublicApiEvent;
+  logger: InnerLogger;
+  hotkey: IPublicApiHotkey;
+  innerProject: IProject;
+  editor: Editor;
+  designer: IDesigner;
+  registerInnerPlugins: () => Promise<void>;
+  innerSetters: InnerSetters;
+  innerSkeleton: ISkeleton;
+  innerHotkey: IHotKey;
+  innerPlugins: ILowCodePluginManager;
+  canvas: IPublicApiCanvas;
+  pluginEvent: IPublicApiEvent;
+  preference: IPluginPreferenceMananger;
+  workspace: IWorkspace;
+
+  constructor(innerWorkspace: IWorkspace, viewName: string, readonly registerLevel: IPublicEnumPluginRegisterLevel, public editorWindow?: IEditorWindow) {
     const editor = new Editor(viewName, true);
 
     const innerSkeleton = new InnerSkeleton(editor, viewName);
@@ -86,6 +130,8 @@ export class BasicContext implements IPublicModelPluginContext {
     const logger = getLogger({ level: 'warn', bizName: 'common' });
     const skeleton = new Skeleton(innerSkeleton, 'any', true);
     const canvas = new Canvas(editor, true);
+    const commonUI = new CommonUI(editor);
+    const innerCommand = new InnerCommand();
     editor.set('setters', setters);
     editor.set('project', project);
     editor.set('material', material);
@@ -108,7 +154,7 @@ export class BasicContext implements IPublicModelPluginContext {
     this.canvas = canvas;
     const common = new Common(editor, innerSkeleton);
     this.common = common;
-    let plugins: any;
+    let plugins: IPublicApiPlugins;
 
     const pluginContextApiAssembler: ILowCodePluginContextApiAssembler = {
       assembleApis: (context: ILowCodePluginContextPrivate, pluginName: string, meta: IPublicTypePluginMeta) => {
@@ -119,12 +165,23 @@ export class BasicContext implements IPublicModelPluginContext {
         context.setters = setters;
         context.material = material;
         const eventPrefix = meta?.eventPrefix || 'common';
+        const commandScope = meta?.commandScope;
         context.event = new Event(commonEvent, { prefix: eventPrefix });
         context.config = config;
         context.common = common;
         context.plugins = plugins;
         context.logger = new Logger({ level: 'warn', bizName: `plugin:${pluginName}` });
         context.canvas = canvas;
+        context.commonUI = commonUI;
+        if (editorWindow) {
+          context.editorWindow = new Window(editorWindow);
+        }
+        context.command = new Command(innerCommand, context as IPublicModelPluginContext, {
+          commandScope,
+        });
+        context.registerLevel = registerLevel;
+        context.isPluginRegisteredInWorkspace = registerLevel === IPublicEnumPluginRegisterLevel.Workspace;
+        editor.set('pluginContext', context);
       },
     };
 

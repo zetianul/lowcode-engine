@@ -83,7 +83,6 @@ beforeEach(() => {
   });
 
   component = renderer.create(
-    // @ts-ignore
     <Div _leaf={DivNode}>
       <Text _leaf={TextNode} content="content"></Text>
     </Div>
@@ -238,7 +237,6 @@ describe('mini unit render', () => {
     nodeMap.set(textSchema.id, TextNode);
 
     component = renderer.create(
-      // @ts-ignore
       <MiniRenderDiv _leaf={MiniRenderDivNode}>
         <Text _leaf={TextNode} content="content"></Text>
       </MiniRenderDiv>
@@ -285,7 +283,6 @@ describe('mini unit render', () => {
     nodeMap.set(textSchema.id, TextNode);
 
     renderer.create(
-      // @ts-ignore
       <div>
         <Text _leaf={TextNode} content="content"></Text>
       </div>
@@ -309,7 +306,6 @@ describe('mini unit render', () => {
     });
 
     renderer.create(
-      // @ts-ignore
       <div>
         <Text _leaf={TextNode} content="content"></Text>
       </div>
@@ -388,7 +384,6 @@ describe('mini unit render', () => {
     };
 
     const component = renderer.create(
-      // @ts-ignore
       <MiniRenderDiv _leaf={MiniRenderDivNode}>
         <Text _leaf={TextNode} content="content"></Text>
       </MiniRenderDiv>
@@ -428,7 +423,6 @@ describe('mini unit render', () => {
     nodeMap.set(miniRenderSchema.id, MiniRenderDivNode);
 
     component = renderer.create(
-      // @ts-ignore
       <MiniRenderDiv _leaf={MiniRenderDivNode}>
         <Text _leaf={TextNode} content="content"></Text>
       </MiniRenderDiv>
@@ -491,7 +485,6 @@ describe('onVisibleChange', () => {
 describe('children', () => {
   it('this.props.children is array', () => {
     const component = renderer.create(
-      // @ts-ignore
       <Div _leaf={DivNode}>
         <Text _leaf={TextNode} content="content"></Text>
         <Text _leaf={TextNode} content="content"></Text>
@@ -510,6 +503,41 @@ describe('onChildrenChange', () => {
     ]
     DivNode.emitChildrenChange();
     makeSnapshot(component);
+  });
+
+  it('children is 0', () => {
+    DivNode.schema.children = 0
+    DivNode.emitChildrenChange();
+    const componentInstance = component.root;
+    expect(componentInstance.findByType(components.Div).props.children).toEqual(0);
+  });
+
+  it('children is false', () => {
+    DivNode.schema.children = false
+    DivNode.emitChildrenChange();
+    const componentInstance = component.root;
+    expect(componentInstance.findByType(components.Div).props.children).toEqual(false);
+  });
+
+  it('children is []', () => {
+    DivNode.schema.children = []
+    DivNode.emitChildrenChange();
+    const componentInstance = component.root;
+    expect(componentInstance.findByType(components.Div).props.children).toEqual([]);
+  });
+
+  it('children is null', () => {
+    DivNode.schema.children = null
+    DivNode.emitChildrenChange();
+    const componentInstance = component.root;
+    expect(componentInstance.findByType(components.Div).props.children).toEqual(null);
+  });
+
+  it('children is undefined', () => {
+    DivNode.schema.children = undefined;
+    DivNode.emitChildrenChange();
+    const componentInstance = component.root;
+    expect(componentInstance.findByType(components.Div).props.children).toEqual(undefined);
   });
 });
 

@@ -1,22 +1,31 @@
 import { globalContext } from '@alilc/lowcode-editor-core';
 import {
-  Skeleton as InnerSkeleton,
+  ISkeleton,
   SkeletonEvents,
 } from '@alilc/lowcode-editor-skeleton';
 import { skeletonSymbol } from '../symbols';
-import { IPublicApiSkeleton, IPublicTypeDisposable, IPublicTypeSkeletonConfig, IPublicTypeWidgetConfigArea } from '@alilc/lowcode-types';
+import { IPublicApiSkeleton, IPublicModelSkeletonItem, IPublicTypeConfigTransducer, IPublicTypeDisposable, IPublicTypeSkeletonConfig, IPublicTypeWidgetConfigArea } from '@alilc/lowcode-types';
+import { getLogger } from '@alilc/lowcode-utils';
+import { SkeletonItem } from '../model/skeleton-item';
 
 const innerSkeletonSymbol = Symbol('skeleton');
+
+const logger = getLogger({ level: 'warn', bizName: 'shell-skeleton' });
+
 export class Skeleton implements IPublicApiSkeleton {
-  private readonly [innerSkeletonSymbol]: InnerSkeleton;
+  private readonly [innerSkeletonSymbol]: ISkeleton;
   private readonly pluginName: string;
 
-  get [skeletonSymbol](): InnerSkeleton {
+  get [skeletonSymbol](): ISkeleton {
     if (this.workspaceMode) {
       return this[innerSkeletonSymbol];
     }
     const workspace = globalContext.get('workspace');
     if (workspace.isActive) {
+      if (!workspace.window?.innerSkeleton) {
+        logger.error('skeleton api 调用时机出现问题，请检查');
+        return this[innerSkeletonSymbol];
+      }
       return workspace.window.innerSkeleton;
     }
 
@@ -24,7 +33,7 @@ export class Skeleton implements IPublicApiSkeleton {
   }
 
   constructor(
-      skeleton: InnerSkeleton,
+      skeleton: ISkeleton,
       pluginName: string,
       readonly workspaceMode: boolean = false,
     ) {
@@ -38,12 +47,15 @@ export class Skeleton implements IPublicApiSkeleton {
    * @param extraConfig
    * @returns
    */
-  add(config: IPublicTypeSkeletonConfig, extraConfig?: Record<string, any>) {
+  add(config: IPublicTypeSkeletonConfig, extraConfig?: Record<string, any>): IPublicModelSkeletonItem | undefined {
     const configWithName = {
       ...config,
       pluginName: this.pluginName,
     };
-    return this[skeletonSymbol].add(configWithName, extraConfig);
+    const item = this[skeletonSymbol].add(configWithName, extraConfig);
+    if (item) {
+      return new SkeletonItem(item);
+    }
   }
 
   /**
@@ -57,7 +69,20 @@ export class Skeleton implements IPublicApiSkeleton {
     if (!normalizeArea(area)) {
       return;
     }
-    skeleton[normalizeArea(area)!].container?.remove(name);
+    skeleton[normalizeArea(area)].container?.remove(name);
+  }
+
+  getAreaItems(areaName: IPublicTypeWidgetConfigArea): IPublicModelSkeletonItem[] {
+    return this[skeletonSymbol][normalizeArea(areaName)].container.items?.map(d => new SkeletonItem(d));
+  }
+
+  getPanel(name: string) {
+    const item = this[skeletonSymbol].getPanel(name);
+    if (!item) {
+      return;
+    }
+
+    return new SkeletonItem(item);
   }
 
   /**
@@ -129,14 +154,28 @@ export class Skeleton implements IPublicApiSkeleton {
    * @param listener
    * @returns
    */
-  onShowPanel(listener: (...args: any[]) => void): IPublicTypeDisposable {
+  onShowPanel(listener: (paneName: string, panel: IPublicModelSkeletonItem) => void): IPublicTypeDisposable {
     const { editor } = this[skeletonSymbol];
     editor.eventBus.on(SkeletonEvents.PANEL_SHOW, (name: any, panel: any) => {
-      // 不泄漏 skeleton
-      const { skeleton, ...restPanel } = panel;
-      listener(name, restPanel);
+      listener(name, new SkeletonItem(panel));
     });
     return () => editor.eventBus.off(SkeletonEvents.PANEL_SHOW, listener);
+  }
+
+  onDisableWidget(listener: (...args: any[]) => void): IPublicTypeDisposable {
+    const { editor } = this[skeletonSymbol];
+    editor.eventBus.on(SkeletonEvents.WIDGET_DISABLE, (name: any, panel: any) => {
+      listener(name, new SkeletonItem(panel));
+    });
+    return () => editor.eventBus.off(SkeletonEvents.WIDGET_DISABLE, listener);
+  }
+
+  onEnableWidget(listener: (...args: any[]) => void): IPublicTypeDisposable {
+    const { editor } = this[skeletonSymbol];
+    editor.eventBus.on(SkeletonEvents.WIDGET_ENABLE, (name: any, panel: any) => {
+      listener(name, new SkeletonItem(panel));
+    });
+    return () => editor.eventBus.off(SkeletonEvents.WIDGET_ENABLE, listener);
   }
 
   /**
@@ -147,9 +186,7 @@ export class Skeleton implements IPublicApiSkeleton {
   onHidePanel(listener: (...args: any[]) => void): IPublicTypeDisposable {
     const { editor } = this[skeletonSymbol];
     editor.eventBus.on(SkeletonEvents.PANEL_HIDE, (name: any, panel: any) => {
-      // 不泄漏 skeleton
-      const { skeleton, ...restPanel } = panel;
-      listener(name, restPanel);
+      listener(name, new SkeletonItem(panel));
     });
     return () => editor.eventBus.off(SkeletonEvents.PANEL_HIDE, listener);
   }
@@ -162,9 +199,7 @@ export class Skeleton implements IPublicApiSkeleton {
   onShowWidget(listener: (...args: any[]) => void): IPublicTypeDisposable {
     const { editor } = this[skeletonSymbol];
     editor.eventBus.on(SkeletonEvents.WIDGET_SHOW, (name: any, panel: any) => {
-      // 不泄漏 skeleton
-      const { skeleton, ...rest } = panel;
-      listener(name, rest);
+      listener(name, new SkeletonItem(panel));
     });
     return () => editor.eventBus.off(SkeletonEvents.WIDGET_SHOW, listener);
   }
@@ -177,15 +212,17 @@ export class Skeleton implements IPublicApiSkeleton {
   onHideWidget(listener: (...args: any[]) => void): IPublicTypeDisposable {
     const { editor } = this[skeletonSymbol];
     editor.eventBus.on(SkeletonEvents.WIDGET_HIDE, (name: any, panel: any) => {
-      // 不泄漏 skeleton
-      const { skeleton, ...rest } = panel;
-      listener(name, rest);
+      listener(name, new SkeletonItem(panel));
     });
     return () => editor.eventBus.off(SkeletonEvents.WIDGET_HIDE, listener);
   }
+
+  registerConfigTransducer(fn: IPublicTypeConfigTransducer, level: number, id?: string) {
+    this[skeletonSymbol].registerConfigTransducer(fn, level, id);
+  }
 }
 
-function normalizeArea(area: IPublicTypeWidgetConfigArea | undefined) {
+function normalizeArea(area: IPublicTypeWidgetConfigArea | undefined): 'leftArea' | 'rightArea' | 'topArea' | 'toolbar' | 'mainArea' | 'bottomArea' | 'leftFixedArea' | 'leftFloatArea' | 'stages' | 'subTopArea' {
   switch (area) {
     case 'leftArea':
     case 'left':
@@ -212,6 +249,8 @@ function normalizeArea(area: IPublicTypeWidgetConfigArea | undefined) {
       return 'leftFloatArea';
     case 'stages':
       return 'stages';
+    case 'subTopArea':
+      return 'subTopArea';
     default:
       throw new Error(`${area} not supported`);
   }

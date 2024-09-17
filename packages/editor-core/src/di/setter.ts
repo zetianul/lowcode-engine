@@ -1,7 +1,6 @@
 import { ReactNode } from 'react';
-import { IPublicTypeCustomView, IPublicTypeRegisteredSetter } from '@alilc/lowcode-types';
+import { IPublicApiSetters, IPublicModelSettingField, IPublicTypeCustomView, IPublicTypeRegisteredSetter } from '@alilc/lowcode-types';
 import { createContent, isCustomView } from '@alilc/lowcode-utils';
-
 
 const settersMap = new Map<string, IPublicTypeRegisteredSetter & {
   type: string;
@@ -29,7 +28,7 @@ export function registerSetter(
   if (!setter.initialValue) {
     const initial = getInitialFromSetter(setter.component);
     if (initial) {
-      setter.initialValue = (field: any) => {
+      setter.initialValue = (field: IPublicModelSettingField) => {
         return initial.call(field, field.getValue());
       };
     }
@@ -44,12 +43,16 @@ function getInitialFromSetter(setter: any) {
     ) || null; // eslint-disable-line
 }
 
-export class Setters {
-  constructor(readonly viewName: string = 'global') {}
+export interface ISetters extends IPublicApiSetters {
 
+}
+
+export class Setters implements ISetters {
   settersMap = new Map<string, IPublicTypeRegisteredSetter & {
     type: string;
   }>();
+
+  constructor(readonly viewName: string = 'global') {}
 
   getSetter = (type: string): IPublicTypeRegisteredSetter | null => {
     return this.settersMap.get(type) || null;
@@ -78,7 +81,7 @@ export class Setters {
     if (!setter.initialValue) {
       const initial = getInitialFromSetter(setter.component);
       if (initial) {
-        setter.initialValue = (field: any) => {
+        setter.initialValue = (field: IPublicModelSettingField) => {
           return initial.call(field, field.getValue());
         };
       }

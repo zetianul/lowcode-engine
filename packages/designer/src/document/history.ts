@@ -1,6 +1,7 @@
-import { reaction, untracked, globalContext, IEventBus, createModuleEventBus } from '@alilc/lowcode-editor-core';
-import { IPublicTypeNodeSchema, IPublicModelHistory } from '@alilc/lowcode-types';
+import { reaction, untracked, IEventBus, createModuleEventBus } from '@alilc/lowcode-editor-core';
+import { IPublicTypeNodeSchema, IPublicModelHistory, IPublicTypeDisposable } from '@alilc/lowcode-types';
 import { Logger } from '@alilc/lowcode-utils';
+import { IDocumentModel } from '../designer';
 
 const logger = new Logger({ level: 'warn', bizName: 'history' });
 
@@ -10,7 +11,7 @@ export interface Serialization<K = IPublicTypeNodeSchema, T = string> {
 }
 
 export interface IHistory extends IPublicModelHistory {
-
+  onStateChange(func: () => any): IPublicTypeDisposable;
 }
 
 export class History<T = IPublicTypeNodeSchema> implements IHistory {
@@ -37,10 +38,12 @@ export class History<T = IPublicTypeNodeSchema> implements IHistory {
     return this.session.data;
   }
 
+  private timeGap: number = 1000;
+
   constructor(
       dataFn: () => T | null,
       private redoer: (data: T) => void,
-      private timeGap: number = 1000,
+      private document?: IDocumentModel,
     ) {
     this.session = new Session(0, null, this.timeGap);
     this.records = [this.session];
@@ -130,8 +133,7 @@ export class History<T = IPublicTypeNodeSchema> implements IHistory {
     }
     const cursor = this.session.cursor - 1;
     this.go(cursor);
-    const workspace = globalContext.get('workspace');
-    const editor = workspace.isActive ? workspace.window.editor : globalContext.get('editor');
+    const editor = this.document?.designer.editor;
     if (!editor) {
       return;
     }
@@ -144,8 +146,7 @@ export class History<T = IPublicTypeNodeSchema> implements IHistory {
     }
     const cursor = this.session.cursor + 1;
     this.go(cursor);
-    const workspace = globalContext.get('workspace');
-    const editor = workspace.isActive ? workspace.window.editor : globalContext.get('editor');
+    const editor = this.document?.designer.editor;
     if (!editor) {
       return;
     }
@@ -189,11 +190,11 @@ export class History<T = IPublicTypeNodeSchema> implements IHistory {
    * @param func
    * @returns
    */
-  onChangeState(func: () => any): () => void {
+  onChangeState(func: () => any): IPublicTypeDisposable {
     return this.onStateChange(func);
   }
 
-  onStateChange(func: () => any): () => void {
+  onStateChange(func: () => any): IPublicTypeDisposable {
     this.emitter.on('statechange', func);
     return () => {
       this.emitter.removeListener('statechange', func);
@@ -205,7 +206,7 @@ export class History<T = IPublicTypeNodeSchema> implements IHistory {
    * @param func
    * @returns
    */
-  onChangeCursor(func: () => any): () => void {
+  onChangeCursor(func: () => any): IPublicTypeDisposable {
     return this.onCursor(func);
   }
 

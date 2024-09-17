@@ -79,7 +79,6 @@ describe('Base Render methods', () => {
     // const originalUtils = jest.requireActual('../../src/utils');
     // mockParseExpression.mockImplementation(originalUtils.parseExpression);
     const component = TestRenderer.create(
-      // @ts-ignore
       <RendererClass
         __schema={mockSchema}
         components={components as any}
@@ -121,7 +120,7 @@ describe('Base Render methods', () => {
   // it('should excute lifecycle.componentDidCatch when defined', () => {
   // });
 
-  // it('__excuteLifeCycleMethod should work', () => {
+  // it('__executeLifeCycleMethod should work', () => {
   // });
 
   // it('reloadDataSource should work', () => {

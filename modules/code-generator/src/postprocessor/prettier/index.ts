@@ -20,8 +20,10 @@ const factory: PostProcessorFactory<ProcessorConfig> = (config?: ProcessorConfig
 
   const codePrettier: PostProcessor = (content: string, fileType: string) => {
     let parser: prettier.BuiltInParserName | any;
-    if (fileType === 'js' || fileType === 'jsx') {
-      parser = 'babel';
+    if (fileType === 'js' || fileType === 'jsx' || fileType === 'ts' || fileType === 'tsx') {
+      parser = 'babel-ts';
+    } else if (fileType === 'json') {
+      parser = 'json-stringify';
     } else if (PARSERS.indexOf(fileType) >= 0) {
       parser = fileType;
     } else if (cfg.customFileTypeParser[fileType]) {

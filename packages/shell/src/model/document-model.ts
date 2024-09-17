@@ -21,6 +21,7 @@ import {
   IPublicApiCanvas,
   IPublicTypeDisposable,
   IPublicModelEditor,
+  IPublicTypeNodeSchema,
 } from '@alilc/lowcode-types';
 import { isDragNodeObject } from '@alilc/lowcode-utils';
 import { Node as ShellNode } from './node';
@@ -89,7 +90,7 @@ export class DocumentModel implements IPublicModelDocumentModel {
    * @returns
    */
   get project(): IPublicApiProject {
-    return ShellProject.create(this[documentSymbol].project);
+    return ShellProject.create(this[documentSymbol].project, true);
   }
 
   /**
@@ -163,7 +164,7 @@ export class DocumentModel implements IPublicModelDocumentModel {
    * @param stage
    * @returns
    */
-  exportSchema(stage: IPublicEnumTransformStage = IPublicEnumTransformStage.Render): any {
+  exportSchema(stage: IPublicEnumTransformStage = IPublicEnumTransformStage.Render): IPublicTypeRootSchema | undefined {
     return this[documentSymbol].export(stage);
   }
 
@@ -195,7 +196,7 @@ export class DocumentModel implements IPublicModelDocumentModel {
    * @param data
    * @returns
    */
-  createNode(data: any): IPublicModelNode | null {
+  createNode<IPublicModelNode>(data: IPublicTypeNodeSchema): IPublicModelNode | null {
     return ShellNode.create(this[documentSymbol].createNode(data));
   }
 
@@ -251,10 +252,11 @@ export class DocumentModel implements IPublicModelDocumentModel {
    * 当前 document 新增节点事件，此时节点已经挂载到 document 上
    */
   onMountNode(fn: (payload: { node: IPublicModelNode }) => void): IPublicTypeDisposable {
-    this[editorSymbol].eventBus.on('node.add', fn as any);
-    return () => {
-      this[editorSymbol].eventBus.off('node.add', fn as any);
-    };
+    return this[documentSymbol].onMountNode(({
+      node,
+    }) => {
+      fn({ node: ShellNode.create(node)! });
+    });
   }
 
   /**
@@ -289,7 +291,7 @@ export class DocumentModel implements IPublicModelDocumentModel {
    * @param fn
    */
   onChangeNodeVisible(fn: (node: IPublicModelNode, visible: boolean) => void): IPublicTypeDisposable {
-    return this[documentSymbol].onChangeNodeVisible((node: IPublicModelNode, visible: boolean) => {
+    return this[documentSymbol].onChangeNodeVisible((node: InnerNode, visible: boolean) => {
       fn(ShellNode.create(node)!, visible);
     });
   }
@@ -299,7 +301,7 @@ export class DocumentModel implements IPublicModelDocumentModel {
    * @param fn
    */
   onChangeNodeChildren(fn: (info: IPublicTypeOnChangeOptions) => void): IPublicTypeDisposable {
-    return this[documentSymbol].onChangeNodeChildren((info?: IPublicTypeOnChangeOptions) => {
+    return this[documentSymbol].onChangeNodeChildren((info?: IPublicTypeOnChangeOptions<InnerNode>) => {
       if (!info) {
         return;
       }

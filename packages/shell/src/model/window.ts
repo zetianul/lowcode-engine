@@ -1,10 +1,11 @@
 import { windowSymbol } from '../symbols';
 import { IPublicModelResource, IPublicModelWindow, IPublicTypeDisposable } from '@alilc/lowcode-types';
-import { EditorWindow } from '@alilc/lowcode-workspace';
+import { IEditorWindow } from '@alilc/lowcode-workspace';
 import { Resource as ShellResource } from './resource';
+import { EditorView } from './editor-view';
 
 export class Window implements IPublicModelWindow {
-  private readonly [windowSymbol]: EditorWindow;
+  private readonly [windowSymbol]: IEditorWindow;
 
   get id() {
     return this[windowSymbol]?.id;
@@ -22,7 +23,7 @@ export class Window implements IPublicModelWindow {
     return new ShellResource(this[windowSymbol].resource);
   }
 
-  constructor(editorWindow: EditorWindow) {
+  constructor(editorWindow: IEditorWindow) {
     this[windowSymbol] = editorWindow;
   }
 
@@ -31,7 +32,7 @@ export class Window implements IPublicModelWindow {
   }
 
   changeViewType(viewName: string) {
-    this[windowSymbol].changeViewType(viewName, false);
+    this[windowSymbol].changeViewName(viewName, false);
   }
 
   onChangeViewType(fun: (viewName: string) => void): IPublicTypeDisposable {
@@ -40,5 +41,20 @@ export class Window implements IPublicModelWindow {
 
   async save() {
     return await this[windowSymbol].save();
+  }
+
+  onSave(fn: () => void) {
+    return this[windowSymbol].onSave(fn);
+  }
+
+  get currentEditorView() {
+    if (this[windowSymbol]._editorView) {
+      return new EditorView(this[windowSymbol]._editorView).toProxy() as any;
+    }
+    return null;
+  }
+
+  get editorViews() {
+    return Array.from(this[windowSymbol].editorViews.values()).map(d => new EditorView(d).toProxy() as any);
   }
 }

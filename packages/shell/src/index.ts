@@ -7,9 +7,11 @@ import {
   Prop,
   Selection,
   Dragon,
-  SettingPropEntry,
   SettingTopEntry,
   Clipboard,
+  SettingField,
+  Window,
+  SkeletonItem,
 } from './model';
 import {
   Project,
@@ -25,6 +27,9 @@ import {
   Canvas,
   Workspace,
   SimulatorHost,
+  Config,
+  CommonUI,
+  Command,
 } from './api';
 
 export * from './symbols';
@@ -49,8 +54,9 @@ export {
   Selection,
   Setters,
   Hotkey,
+  Window,
   Skeleton,
-  SettingPropEntry,
+  SettingField as SettingPropEntry,
   SettingTopEntry,
   Dragon,
   Common,
@@ -61,4 +67,9 @@ export {
   Workspace,
   Clipboard,
   SimulatorHost,
+  Config,
+  SettingField,
+  SkeletonItem,
+  CommonUI,
+  Command,
 };

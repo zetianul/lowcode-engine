@@ -83,7 +83,10 @@ export class LowCodePluginManager implements ILowCodePluginManager {
     }
     const ctx = this._getLowCodePluginContext({ pluginName, meta });
     const customFilterValidOptions = engineConfig.get('customPluginFilterOptions', filterValidOptions);
-    const config = pluginModel(ctx, customFilterValidOptions(options, preferenceDeclaration!));
+    const pluginTransducer = engineConfig.get('customPluginTransducer', null);
+    const newPluginModel = pluginTransducer ? await pluginTransducer(pluginModel, ctx, options) : pluginModel;
+    const newOptions = customFilterValidOptions(options, newPluginModel.meta?.preferenceDeclaration);
+    const config = newPluginModel(ctx, newOptions);
     // compat the legacy way to declare pluginName
     // @ts-ignore
     pluginName = pluginName || config.name;
@@ -143,11 +146,10 @@ export class LowCodePluginManager implements ILowCodePluginManager {
   }
 
   async delete(pluginName: string): Promise<boolean> {
-    const idx = this.plugins.findIndex((plugin) => plugin.name === pluginName);
-    if (idx === -1) return false;
-    const plugin = this.plugins[idx];
+    const plugin = this.plugins.find(({ name }) => name === pluginName);
+    if (!plugin) return false;
     await plugin.destroy();
-
+    const idx = this.plugins.indexOf(plugin);
     this.plugins.splice(idx, 1);
     return this.pluginsMap.delete(pluginName);
   }

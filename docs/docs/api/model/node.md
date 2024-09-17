@@ -254,6 +254,8 @@ sidebar_position: 1
 
 `@type {IPublicModelSettingTopEntry}`
 
+相关章节：[设置器顶层操作对象](./setting-top-entry)
+
 相关类型：[IPublicModelSettingTopEntry](https://github.com/alibaba/lowcode-engine/blob/main/packages/types/src/shell/model/setting-top-entry.ts)
 
 ### visible
@@ -645,3 +647,32 @@ setConditionalVisible(): void;
 ```
 
 **@since v1.1.0**
+
+### getDOMNode
+获取节点实例对应的 dom 节点
+
+```typescript
+/**
+ * 获取节点实例对应的 dom 节点
+ */
+getDOMNode(): HTMLElement;
+
+```
+
+### getRGL
+
+获取磁贴相关信息
+
+```typescript
+/**
+ * 获取磁贴相关信息
+ */
+getRGL(): {
+  isContainerNode: boolean;
+  isEmptyNode: boolean;
+  isRGLContainerNode: boolean;
+  isRGLNode: boolean;
+  isRGL: boolean;
+  rglNode: IPublicModelNode | null;
+}
+```

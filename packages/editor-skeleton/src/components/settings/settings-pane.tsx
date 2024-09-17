@@ -1,16 +1,15 @@
-import { Component, MouseEvent, Fragment } from 'react';
-import { shallowIntl, observer, obx, engineConfig, runInAction, globalContext } from '@alilc/lowcode-editor-core';
-import { createContent, isJSSlot, isSetterConfig, isSettingField } from '@alilc/lowcode-utils';
-import { Skeleton } from '@alilc/lowcode-editor-skeleton';
-import { IPublicTypeCustomView } from '@alilc/lowcode-types';
-import { SettingField, SettingTopEntry, SettingEntry, ComponentMeta } from '@alilc/lowcode-designer';
+import { Component, MouseEvent, Fragment, ReactNode } from 'react';
+import { shallowIntl, observer, obx, engineConfig, runInAction } from '@alilc/lowcode-editor-core';
+import { createContent, isJSSlot, isSetterConfig, shouldUseVariableSetter } from '@alilc/lowcode-utils';
+import { Skeleton, Stage } from '@alilc/lowcode-editor-skeleton';
+import { IPublicApiSetters, IPublicTypeCustomView, IPublicTypeDynamicProps } from '@alilc/lowcode-types';
+import { ISettingEntry, IComponentMeta, ISettingField, isSettingField, ISettingTopEntry } from '@alilc/lowcode-designer';
 import { createField } from '../field';
 import PopupService, { PopupPipe } from '../popup';
 import { SkeletonContext } from '../../context';
 import { intl } from '../../locale';
-import { Setters } from '@alilc/lowcode-shell';
 
-function isStandardComponent(componentMeta: ComponentMeta | null) {
+function isStandardComponent(componentMeta: IComponentMeta | null) {
   if (!componentMeta) return false;
   const { prototype } = componentMeta;
   return prototype == null;
@@ -31,15 +30,16 @@ function isInitialValueNotEmpty(initialValue: any) {
   return (initialValue !== undefined && initialValue !== null);
 }
 
-type SettingFieldViewProps = { field: SettingField };
+type SettingFieldViewProps = { field: ISettingField };
 type SettingFieldViewState = { fromOnChange: boolean; value: any };
+
 @observer
 class SettingFieldView extends Component<SettingFieldViewProps, SettingFieldViewState> {
   static contextType = SkeletonContext;
 
   stageName: string | undefined;
 
-  setters: Setters;
+  setters?: IPublicApiSetters;
 
   constructor(props: SettingFieldViewProps) {
     super(props);
@@ -48,17 +48,17 @@ class SettingFieldView extends Component<SettingFieldViewProps, SettingFieldView
     const { extraProps } = field;
     const { display } = extraProps;
 
-    const workspace = globalContext.get('workspace');
-    const editor = workspace.isActive ? workspace.window.editor : globalContext.get('editor');
-    const { stages } = editor.get('skeleton') as Skeleton;
-    this.setters = editor.get('setters');
+    const editor = field.designer?.editor;
+    const skeleton = editor?.get('skeleton') as Skeleton;
+    const { stages } = skeleton || {};
+    this.setters = editor?.get('setters');
     let stageName;
     if (display === 'entry') {
       runInAction(() => {
-        stageName = `${field.getNode().id}_${field.name.toString()}`;
+        stageName = `${field.getNode().id}_${field.name?.toString()}`;
         // 清除原 stage，不然 content 引用的一直是老的 field，导致数据无法得到更新
         stages.container.remove(stageName);
-        const stage = stages.add({
+        stages.add({
           type: 'Widget',
           name: stageName,
           content: <Fragment>{field.items.map((item, index) => createSettingFieldView(item, field, index))}</Fragment>,
@@ -79,12 +79,27 @@ class SettingFieldView extends Component<SettingFieldViewProps, SettingFieldView
     const { extraProps } = this.field;
     const { condition } = extraProps;
     try {
-      return typeof condition === 'function' ? condition(this.field.internalToShellPropEntry()) !== false : true;
+      return typeof condition === 'function' ? condition(this.field.internalToShellField()) !== false : true;
     } catch (error) {
       console.error('exception when condition (hidden) is excuted', error);
     }
 
     return true;
+  }
+
+  get ignoreDefaultValue(): boolean {
+    const { extraProps } = this.field;
+    const { ignoreDefaultValue } = extraProps;
+    try {
+      if (typeof ignoreDefaultValue === 'function') {
+        return ignoreDefaultValue(this.field.internalToShellField());
+      }
+      return false;
+    } catch (error) {
+      console.error('exception when ignoreDefaultValue is excuted', error);
+    }
+
+    return false;
   }
 
   get setterInfo(): {
@@ -96,7 +111,9 @@ class SettingFieldView extends Component<SettingFieldViewProps, SettingFieldView
     const { defaultValue } = extraProps;
 
     const { setter } = this.field;
-    let setterProps: any = {};
+    let setterProps: {
+      setters?: (ReactNode | string)[];
+    } & Record<string, unknown> | IPublicTypeDynamicProps = {};
     let setterType: any;
     let initialValue: any = null;
 
@@ -110,7 +127,7 @@ class SettingFieldView extends Component<SettingFieldViewProps, SettingFieldView
       if (setter.props) {
         setterProps = setter.props;
         if (typeof setterProps === 'function') {
-          setterProps = setterProps(this.field.internalToShellPropEntry());
+          setterProps = setterProps(this.field.internalToShellField());
         }
       }
       if (setter.initialValue != null) {
@@ -138,23 +155,29 @@ class SettingFieldView extends Component<SettingFieldViewProps, SettingFieldView
     const supportVariable = this.field.extraProps?.supportVariable;
     // supportVariableGlobally 只对标准组件生效，vc 需要单独配置
     const supportVariableGlobally = engineConfig.get('supportVariableGlobally', false) && isStandardComponent(componentMeta);
-    if (supportVariable || supportVariableGlobally) {
-      if (setterType === 'MixedSetter') {
-        // VariableSetter 不单独使用
-        if (Array.isArray(setterProps.setters) && !setterProps.setters.includes('VariableSetter')) {
-          setterProps.setters.push('VariableSetter');
-        }
-      } else {
-        setterType = 'MixedSetter';
-        setterProps = {
-          setters: [
-            setter,
-            'VariableSetter',
-          ],
-        };
-      }
+    const isUseVariableSetter = shouldUseVariableSetter(supportVariable, supportVariableGlobally);
+    if (isUseVariableSetter === false) {
+      return {
+        setterProps,
+        initialValue,
+        setterType,
+      };
     }
 
+    if (setterType === 'MixedSetter') {
+      // VariableSetter 不单独使用
+      if (Array.isArray(setterProps.setters) && !setterProps.setters.includes('VariableSetter')) {
+        setterProps.setters.push('VariableSetter');
+      }
+    } else {
+      setterType = 'MixedSetter';
+      setterProps = {
+        setters: [
+          setter,
+          'VariableSetter',
+        ],
+      };
+    }
     return {
       setterProps,
       initialValue,
@@ -170,13 +193,14 @@ class SettingFieldView extends Component<SettingFieldViewProps, SettingFieldView
     const { initialValue } = this.setterInfo;
     if (this.state?.fromOnChange ||
       !isInitialValueNotEmpty(initialValue) ||
+      this.ignoreDefaultValue ||
       this.value !== undefined
     ) {
       return;
     }
     // 当前 field 没有 value 值时，将 initialValue 写入 field
     // 之所以用 initialValue，而不是 defaultValue 是为了保持跟 props.onInitial 的逻辑一致
-    const _initialValue = typeof initialValue === 'function' ? initialValue(this.field.internalToShellPropEntry()) : initialValue;
+    const _initialValue = typeof initialValue === 'function' ? initialValue(this.field.internalToShellField()) : initialValue;
     this.field.setValue(_initialValue);
   }
 
@@ -201,7 +225,7 @@ class SettingFieldView extends Component<SettingFieldViewProps, SettingFieldView
 
     const value = this.value;
 
-    let _onChange = extraProps?.onChange;
+    let onChangeAPI = extraProps?.onChange;
     let stageName = this.stageName;
 
     return createField(
@@ -219,14 +243,14 @@ class SettingFieldView extends Component<SettingFieldViewProps, SettingFieldView
         ...extraProps,
       },
       !stageName &&
-      this.setters.createSetterContent(setterType, {
+      this.setters?.createSetterContent(setterType, {
         ...shallowIntl(setterProps),
         forceInline: extraProps.forceInline,
         key: field.id,
         // === injection
-        prop: field.internalToShellPropEntry(), // for compatible vision
+        prop: field.internalToShellField(), // for compatible vision
         selected: field.top?.getNode()?.internalToShellNode(),
-        field: field.internalToShellPropEntry(),
+        field: field.internalToShellField(),
         // === IO
         value, // reaction point
         initialValue,
@@ -237,13 +261,13 @@ class SettingFieldView extends Component<SettingFieldViewProps, SettingFieldView
             value,
           });
           field.setValue(value, true);
-          if (_onChange) _onChange(value, field);
+          if (onChangeAPI) onChangeAPI(value, field.internalToShellField());
         },
         onInitial: () => {
           if (initialValue == null) {
             return;
           }
-          const value = typeof initialValue === 'function' ? initialValue(field.internalToShellPropEntry()) : initialValue;
+          const value = typeof initialValue === 'function' ? initialValue(field.internalToShellField()) : initialValue;
           this.setState({
             // eslint-disable-next-line react/no-unused-state
             value,
@@ -252,7 +276,9 @@ class SettingFieldView extends Component<SettingFieldViewProps, SettingFieldView
         },
 
         removeProp: () => {
-          field.parent.clearPropValue(field.name);
+          if (field.name) {
+            field.parent.clearPropValue(field.name);
+          }
         },
       }),
       extraProps.forceInline ? 'plain' : extraProps.display,
@@ -272,15 +298,14 @@ class SettingGroupView extends Component<SettingGroupViewProps> {
     const { field } = this.props;
     const { extraProps } = field;
     const { display } = extraProps;
-    const workspace = globalContext.get('workspace');
-    const editor = workspace.isActive ? workspace.window.editor : globalContext.get('editor');
-    const { stages } = editor.get('skeleton') as Skeleton;
+    const editor = this.props.field.designer?.editor;
+    const { stages } = editor?.get('skeleton') as Skeleton;
     // const items = field.items;
 
     let stageName;
     if (display === 'entry') {
       runInAction(() => {
-        stageName = `${field.getNode().id}_${field.name.toString()}`;
+        stageName = `${field.getNode().id}_${field.name?.toString()}`;
         // 清除原 stage，不然 content 引用的一直是老的 field，导致数据无法得到更新
         stages.container.remove(stageName);
         stages.add({
@@ -300,7 +325,7 @@ class SettingGroupView extends Component<SettingGroupViewProps> {
     const { field } = this.props;
     const { extraProps } = field;
     const { condition, display } = extraProps;
-    const visible = field.isSingle && typeof condition === 'function' ? condition(field.internalToShellPropEntry()) !== false : true;
+    const visible = field.isSingle && typeof condition === 'function' ? condition(field.internalToShellField()) !== false : true;
 
     if (!visible) {
       return null;
@@ -324,20 +349,20 @@ class SettingGroupView extends Component<SettingGroupViewProps> {
   }
 }
 
-export function createSettingFieldView(item: SettingField | IPublicTypeCustomView, field: SettingEntry, index?: number) {
-  if (isSettingField(item)) {
-    if (item.isGroup) {
-      return <SettingGroupView field={item} key={item.id} />;
+export function createSettingFieldView(field: ISettingField | IPublicTypeCustomView, fieldEntry: ISettingEntry, index?: number) {
+  if (isSettingField(field)) {
+    if (field.isGroup) {
+      return <SettingGroupView field={field} key={field.id} />;
     } else {
-      return <SettingFieldView field={item} key={item.id} />;
+      return <SettingFieldView field={field} key={field.id} />;
     }
   } else {
-    return createContent(item, { key: index, field });
+    return createContent(field, { key: index, field: fieldEntry });
   }
 }
 
 export type SettingsPaneProps = {
-  target: SettingTopEntry | SettingField;
+  target: ISettingTopEntry | ISettingField;
   usePopup?: boolean;
 };
 

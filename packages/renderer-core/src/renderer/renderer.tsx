@@ -19,10 +19,9 @@ export default function rendererFactory(): IRenderComponent {
 
   const debug = Debug('renderer:entry');
 
-  class FaultComponent extends PureComponent<IPublicTypeNodeSchema> {
+  class FaultComponent extends PureComponent<IPublicTypeNodeSchema | any> {
     render() {
-      // FIXME: errorlog
-      console.error('render error', this.props);
+      logger.error(`%c${this.props.componentName || ''} 组件渲染异常, 异常原因: ${this.props.error?.message || this.props.error || '未知'}`, 'color: #ff0000;');
       return createElement(Div, {
         style: {
           width: '100%',
@@ -86,8 +85,9 @@ export default function rendererFactory(): IRenderComponent {
       debug(`entry.componentWillUnmount - ${this.props?.schema?.componentName}`);
     }
 
-    async componentDidCatch(e: any) {
-      console.warn(e);
+    componentDidCatch(error: Error) {
+      this.state.engineRenderError = true;
+      this.state.error = error;
     }
 
     shouldComponentUpdate(nextProps: IRendererProps) {
@@ -105,52 +105,7 @@ export default function rendererFactory(): IRenderComponent {
       return SetComponent;
     }
 
-    patchDidCatch(SetComponent: any) {
-      if (!this.isValidComponent(SetComponent)) {
-        return;
-      }
-      if (SetComponent.patchedCatch) {
-        return;
-      }
-      if (!SetComponent.prototype) {
-        return;
-      }
-      SetComponent.patchedCatch = true;
-
-      // Rax 的 getDerivedStateFromError 有 BUG，这里先用 componentDidCatch 来替代
-      // @see https://github.com/alibaba/rax/issues/2211
-      const originalDidCatch = SetComponent.prototype.componentDidCatch;
-      SetComponent.prototype.componentDidCatch = function didCatch(this: any, error: Error, errorInfo: any) {
-        this.setState({ engineRenderError: true, error });
-        if (originalDidCatch && typeof originalDidCatch === 'function') {
-          originalDidCatch.call(this, error, errorInfo);
-        }
-      };
-
-      const engine = this;
-      const originRender = SetComponent.prototype.render;
-      SetComponent.prototype.render = function () {
-        if (this.state && this.state.engineRenderError) {
-          this.state.engineRenderError = false;
-          return engine.createElement(engine.getFaultComponent(), {
-            ...this.props,
-            error: this.state.error,
-          });
-        }
-        return originRender.call(this);
-      };
-      const originShouldComponentUpdate = SetComponent.prototype.shouldComponentUpdate;
-      SetComponent.prototype.shouldComponentUpdate = function (nextProps: IRendererProps, nextState: any) {
-        if (nextState && nextState.engineRenderError) {
-          return true;
-        }
-        return originShouldComponentUpdate ? originShouldComponentUpdate.call(this, nextProps, nextState) : true;
-      };
-    }
-
     createElement(SetComponent: any, props: any, children?: any) {
-      // TODO: enable in runtime mode?
-      this.patchDidCatch(SetComponent);
       return (this.props.customCreateElement || createElement)(SetComponent, props, children);
     }
 
@@ -159,7 +114,25 @@ export default function rendererFactory(): IRenderComponent {
     }
 
     getFaultComponent() {
-      return this.props.faultComponent || FaultComponent;
+      const { faultComponent, faultComponentMap, schema } = this.props;
+      if (faultComponentMap) {
+        const { componentName } = schema;
+        return faultComponentMap[componentName] || faultComponent || FaultComponent;
+      }
+      return faultComponent || FaultComponent;
+    }
+
+    getComp() {
+      const { schema, components } = this.props;
+      const { componentName } = schema;
+      const allComponents = { ...RENDERER_COMPS, ...components };
+      let Comp = allComponents[componentName] || RENDERER_COMPS[`${componentName}Renderer`];
+      if (Comp && Comp.prototype) {
+        if (!(Comp.prototype instanceof BaseRenderer)) {
+          Comp = RENDERER_COMPS[`${componentName}Renderer`];
+        }
+      }
+      return Comp;
     }
 
     render() {
@@ -173,21 +146,24 @@ export default function rendererFactory(): IRenderComponent {
         return '模型结构异常';
       }
       debug('entry.render');
-      const { componentName } = schema;
       const allComponents = { ...RENDERER_COMPS, ...components };
-      let Comp = allComponents[componentName] || RENDERER_COMPS[`${componentName}Renderer`];
-      if (Comp && Comp.prototype) {
-        if (!(Comp.prototype instanceof BaseRenderer)) {
-          Comp = RENDERER_COMPS[`${componentName}Renderer`];
-        }
+      let Comp = this.getComp();
+
+      if (this.state && this.state.engineRenderError) {
+        return createElement(this.getFaultComponent(), {
+          ...this.props,
+          error: this.state.error,
+        });
       }
 
       if (Comp) {
-        return createElement(AppContext.Provider, { value: {
-          appHelper,
-          components: allComponents,
-          engine: this,
-        } }, createElement(ConfigProvider, {
+        return createElement(AppContext.Provider, {
+          value: {
+            appHelper,
+            components: allComponents,
+            engine: this,
+          },
+        }, createElement(ConfigProvider, {
           device: this.props.device,
           locale: this.props.locale,
         }, createElement(Comp, {

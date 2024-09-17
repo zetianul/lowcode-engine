@@ -4,8 +4,8 @@ import {
   reaction,
   computed,
   getPublicPath,
-  focusTracker,
   engineConfig,
+  globalLocale,
   IReactionPublic,
   IReactionOptions,
   IReactionDisposer,
@@ -13,6 +13,7 @@ import {
   createModuleEventBus,
   IEventBus,
 } from '@alilc/lowcode-editor-core';
+
 import {
   ISimulatorHost,
   Component,
@@ -38,6 +39,7 @@ import {
   isDragAnyObject,
   isDragNodeObject,
   isLocationData,
+  Logger,
 } from '@alilc/lowcode-utils';
 import {
   isShaken,
@@ -47,29 +49,31 @@ import {
   getRectTarget,
   CanvasPoint,
   Designer,
+  IDesigner,
 } from '../designer';
 import { parseMetadata } from './utils/parse-metadata';
 import { getClosestClickableNode } from './utils/clickable';
 import {
   IPublicTypeComponentMetadata,
-  IPublicTypeComponentSchema,
   IPublicTypePackage,
   IPublicEnumTransitionType,
   IPublicEnumDragObjectType,
-  IPublicTypeDragNodeObject,
   IPublicTypeNodeInstance,
   IPublicTypeComponentInstance,
   IPublicTypeLocationChildrenDetail,
   IPublicTypeLocationDetailType,
   IPublicTypeRect,
+  IPublicModelNode,
 } from '@alilc/lowcode-types';
 import { BuiltinSimulatorRenderer } from './renderer';
 import { clipboard } from '../designer/clipboard';
 import { LiveEditing } from './live-editing/live-editing';
-import { Project } from '../project';
-import { Scroller } from '../designer/scroller';
+import { IProject, Project } from '../project';
+import { IScroller } from '../designer/scroller';
 import { isElementNode, isDOMNodeVisible } from '../utils/misc';
 import { debounce } from 'lodash';
+
+const logger = new Logger({ level: 'warn', bizName: 'designer' });
 
 export type LibraryItem = IPublicTypePackage & {
   package: string;
@@ -121,21 +125,6 @@ const defaultSimulatorUrl = (() => {
   return urls;
 })();
 
-const defaultRaxSimulatorUrl = (() => {
-  const publicPath = getPublicPath();
-  let urls;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_, prefix = '', dev] = /^(.+?)(\/js)?\/?$/.exec(publicPath) || [];
-  if (dev) {
-    urls = [`${prefix}/css/rax-simulator-renderer.css`, `${prefix}/js/rax-simulator-renderer.js`];
-  } else if (process.env.NODE_ENV === 'production') {
-    urls = [`${prefix}/rax-simulator-renderer.css`, `${prefix}/rax-simulator-renderer.js`];
-  } else {
-    urls = [`${prefix}/rax-simulator-renderer.css`, `${prefix}/rax-simulator-renderer.js`];
-  }
-  return urls;
-})();
-
 const defaultEnvironment = [
   // https://g.alicdn.com/mylib/??react/16.11.0/umd/react.production.min.js,react-dom/16.8.6/umd/react-dom.production.min.js,prop-types/15.7.2/prop-types.min.js
   assetItem(
@@ -150,27 +139,16 @@ const defaultEnvironment = [
   ),
 ];
 
-const defaultRaxEnvironment = [
-  assetItem(
-    AssetType.JSText,
-    'window.Rax=parent.Rax;window.React=parent.React;window.ReactDOM=parent.ReactDOM;window.VisualEngineUtils=parent.VisualEngineUtils;window.VisualEngine=parent.VisualEngine',
-  ),
-  assetItem(
-    AssetType.JSText,
-    'window.PropTypes=parent.PropTypes;React.PropTypes=parent.PropTypes; window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = window.parent.__REACT_DEVTOOLS_GLOBAL_HOOK__;',
-  ),
-];
-
 export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProps> {
   readonly isSimulator = true;
 
-  readonly project: Project;
+  readonly project: IProject;
 
-  readonly designer: Designer;
+  readonly designer: IDesigner;
 
   readonly viewport = new Viewport();
 
-  readonly scroller: Scroller;
+  readonly scroller: IScroller;
 
   readonly emitter: IEventBus = createModuleEventBus('BuiltinSimulatorHost');
 
@@ -198,7 +176,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
   }
 
   @computed get locale(): string {
-    return this.get('locale');
+    return this.get('locale') || globalLocale.getLocale();
   }
 
   @computed get deviceClassName(): string | undefined {
@@ -217,7 +195,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
     return this.get('requestHandlersMap') || null;
   }
 
-  get thisRequiredInJSE(): any {
+  get thisRequiredInJSE(): boolean {
     return engineConfig.get('thisRequiredInJSE') ?? true;
   }
 
@@ -231,6 +209,10 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
 
   get faultComponent(): any {
     return engineConfig.get('faultComponent') ?? null;
+  }
+
+  get faultComponentMap(): any {
+    return engineConfig.get('faultComponentMap') ?? null;
   }
 
   @computed get componentsAsset(): Asset | undefined {
@@ -259,6 +241,8 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
   }
 
   @obx.ref private _contentDocument?: Document;
+
+  @obx.ref private _appHelper?: any;
 
   get contentDocument() {
     return this._contentDocument;
@@ -305,11 +289,17 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
     this.designer = designer;
     this.scroller = this.designer.createScroller(this.viewport);
     this.autoRender = !engineConfig.get('disableAutoRender', false);
+    this._appHelper = engineConfig.get('appHelper');
     this.componentsConsumer = new ResourceConsumer<Asset | undefined>(() => this.componentsAsset);
     this.injectionConsumer = new ResourceConsumer(() => {
       return {
-        appHelper: engineConfig.get('appHelper'),
+        appHelper: this._appHelper,
       };
+    });
+
+    engineConfig.onGot('appHelper', (data) => {
+      // appHelper被config.set修改后触发injectionConsumer.consume回调
+      this._appHelper = data;
     });
 
     this.i18nConsumer = new ResourceConsumer(() => this.project.i18n);
@@ -379,9 +369,10 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
 
   purge(): void {
     // todo
+
   }
 
-  mountViewport(viewport: Element | null) {
+  mountViewport(viewport: HTMLElement | null) {
     this.viewport.mount(viewport);
   }
 
@@ -453,11 +444,15 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
 
     const libraryAsset: AssetList = this.buildLibrary();
 
+    if (this.renderEnv === 'rax') {
+      logger.error('After LowcodeEngine v1.3.0, Rax is no longer supported.');
+    }
+
     const vendors = [
       // required & use once
       assetBundle(
         this.get('environment') ||
-          (this.renderEnv === 'rax' ? defaultRaxEnvironment : defaultEnvironment),
+        defaultEnvironment,
         AssetLevel.Environment,
       ),
       // required & use once
@@ -470,7 +465,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
       // required & use once
       assetBundle(
         this.get('simulatorUrl') ||
-          (this.renderEnv === 'rax' ? defaultRaxSimulatorUrl : defaultSimulatorUrl),
+        defaultSimulatorUrl,
         AssetLevel.Runtime,
       ),
     ];
@@ -489,7 +484,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
     if (Object.keys(this.asyncLibraryMap).length > 0) {
       // 加载异步 Library
       await renderer.loadAsyncLibrary(this.asyncLibraryMap);
-      Object.keys(this.asyncLibraryMap).forEach(key => {
+      Object.keys(this.asyncLibraryMap).forEach((key) => {
         delete this.asyncLibraryMap[key];
       });
     }
@@ -504,19 +499,20 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
     // bind hotkey & clipboard
     const hotkey = this.designer.editor.get('innerHotkey');
     hotkey.mount(this._contentWindow);
-    focusTracker.mount(this._contentWindow);
+    const innerSkeleton = this.designer.editor.get('skeleton');
+    innerSkeleton.focusTracker.mount(this._contentWindow);
     clipboard.injectCopyPaster(this._contentDocument);
 
     // TODO: dispose the bindings
   }
 
-  async setupComponents(library) {
+  async setupComponents(library: LibraryItem[]) {
     const libraryAsset: AssetList = this.buildLibrary(library);
     await this.renderer?.load(libraryAsset);
     if (Object.keys(this.asyncLibraryMap).length > 0) {
       // 加载异步 Library
       await this.renderer?.loadAsyncLibrary(this.asyncLibraryMap);
-      Object.keys(this.asyncLibraryMap).forEach(key => {
+      Object.keys(this.asyncLibraryMap).forEach((key) => {
         delete this.asyncLibraryMap[key];
       });
     }
@@ -559,8 +555,8 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
           return;
         }
         // FIXME: dirty fix remove label-for fro liveEditing
-        (downEvent.target as HTMLElement).removeAttribute('for');
-        const nodeInst = this.getNodeInstanceFromElement(downEvent.target as Element);
+        downEvent.target?.removeAttribute('for');
+        const nodeInst = this.getNodeInstanceFromElement(downEvent.target);
         const { focusNode } = documentModel;
         const node = getClosestClickableNode(nodeInst?.node || focusNode, downEvent);
         // 如果找不到可点击的节点，直接返回
@@ -576,7 +572,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
         const isRGLNode = rglNode?.isRGLContainer;
         if (isRGLNode) {
           // 如果拖拽的是磁铁块的右下角 handle，则直接跳过
-          if (downEvent.target.classList.contains('react-resizable-handle')) return;
+          if (downEvent.target?.classList.contains('react-resizable-handle')) return;
           // 禁止多选
           isMulti = false;
           designer.dragon.emitter.emit('rgl.switch', {
@@ -605,7 +601,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
           if (!isShaken(downEvent, e) || isRGLNode) {
             let { id } = node;
             designer.activeTracker.track({ node, instance: nodeInst?.instance });
-            if (isMulti && !node.contains(focusNode) && selection.has(id)) {
+            if (isMulti && focusNode && !node.contains(focusNode) && selection.has(id)) {
               selection.remove(id);
             } else {
               // TODO: 避免选中 Page 组件，默认选中第一个子节点；新增规则 或 判断 Live 模式
@@ -613,7 +609,9 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
                 const firstChildId = node.getChildren()?.get(0)?.getId();
                 if (firstChildId) id = firstChildId;
               }
-              selection.select(node.contains(focusNode) ? focusNode.id : id);
+              if (focusNode) {
+                selection.select(node.contains(focusNode) ? focusNode.id : id);
+              }
 
               // dirty code should refector
               const editor = this.designer?.editor;
@@ -629,8 +627,8 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
           }
         };
 
-        if (isLeftButton && !node.contains(focusNode)) {
-          let nodes: Node[] = [node];
+        if (isLeftButton && focusNode && !node.contains(focusNode)) {
+          let nodes: INode[] = [node];
           let ignoreUpSelected = false;
           if (isMulti) {
             // multi select mode, directily add
@@ -639,7 +637,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
               selection.add(node.id);
               ignoreUpSelected = true;
             }
-            selection.remove(focusNode.id);
+            focusNode?.id && selection.remove(focusNode.id);
             // 获得顶层 nodes
             nodes = selection.getTopNodes();
           } else if (selection.containsNode(node, true)) {
@@ -673,11 +671,11 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
         const x = new Event('click');
         x.initEvent('click', true);
         this._iframe?.dispatchEvent(x);
-        const target = e.target as HTMLElement;
+        const { target } = e;
 
         const customizeIgnoreSelectors = engineConfig.get('customizeIgnoreSelectors');
         // TODO: need more elegant solution to ignore click events of components in designer
-        const defaultIgnoreSelectors: any = [
+        const defaultIgnoreSelectors: string[] = [
           '.next-input-group',
           '.next-checkbox-group',
           '.next-checkbox-wrapper',
@@ -727,7 +725,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
       if (nodeInst?.node) {
         let { node } = nodeInst;
         const focusNode = node.document?.focusNode;
-        if (node.contains(focusNode)) {
+        if (focusNode && node.contains(focusNode)) {
           node = focusNode;
         }
         detecting.capture(node);
@@ -738,7 +736,9 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
         e.stopPropagation();
       }
     };
-    const leave = () => detecting.leave(this.project.currentDocument);
+    const leave = () => {
+      this.project.currentDocument && detecting.leave(this.project.currentDocument);
+    };
 
     doc.addEventListener('mouseover', hover, true);
     doc.addEventListener('mouseleave', leave, false);
@@ -808,7 +808,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
   /**
    * @see ISimulator
    */
-  setSuspense(suspended: boolean) {
+  setSuspense(/** _suspended: boolean */) {
     return false;
     // if (suspended) {
     //   /*
@@ -832,16 +832,22 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
     doc.addEventListener('contextmenu', (e: MouseEvent) => {
       const targetElement = e.target as HTMLElement;
       const nodeInst = this.getNodeInstanceFromElement(targetElement);
+      const editor = this.designer?.editor;
       if (!nodeInst) {
+        editor?.eventBus.emit('designer.builtinSimulator.contextmenu', {
+          originalEvent: e,
+        });
         return;
       }
       const node = nodeInst.node || this.project.currentDocument?.focusNode;
       if (!node) {
+        editor?.eventBus.emit('designer.builtinSimulator.contextmenu', {
+          originalEvent: e,
+        });
         return;
       }
 
       // dirty code should refector
-      const editor = this.designer?.editor;
       const npm = node?.componentMeta?.npm;
       const selected =
         [npm?.package, npm?.componentName].filter((item) => !!item).join('-') ||
@@ -893,7 +899,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
     return this.renderer?.getComponent(componentName) || null;
   }
 
-  createComponent(schema: IPublicTypeComponentSchema): Component | null {
+  createComponent(/** _schema: IPublicTypeComponentSchema */): Component | null {
     return null;
     // return this.renderer?.createComponent(schema) || null;
   }
@@ -912,8 +918,11 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
   /**
    * @see ISimulator
    */
-  getComponentInstances(node: Node, context?: IPublicTypeNodeInstance): IPublicTypeComponentInstance[] | null {
-    const docId = node.document.id;
+  getComponentInstances(node: INode, context?: IPublicTypeNodeInstance): IPublicTypeComponentInstance[] | null {
+    const docId = node.document?.id;
+    if (!docId) {
+      return null;
+    }
 
     const instances = this.instancesMap[docId]?.get(node.id) || null;
     if (!instances || !context) {
@@ -946,7 +955,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
   /**
    * @see ISimulator
    */
-  computeRect(node: Node): IPublicTypeRect | null {
+  computeRect(node: INode): IPublicTypeRect | null {
     const instances = this.getComponentInstances(node);
     if (!instances) {
       return null;
@@ -1011,7 +1020,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
     }
 
     if (last) {
-      const r: any = new DOMRect(last.x, last.y, last.r - last.x, last.b - last.y);
+      const r: IPublicTypeRect = new DOMRect(last.x, last.y, last.r - last.x, last.b - last.y);
       r.elements = elements;
       r.computed = _computed;
       return r;
@@ -1042,20 +1051,20 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
   /**
    * 通过 DOM 节点获取节点，依赖 simulator 的接口
    */
-  getNodeInstanceFromElement(target: Element | null): IPublicTypeNodeInstance<IPublicTypeComponentInstance> | null {
+  getNodeInstanceFromElement(target: Element | null): IPublicTypeNodeInstance<IPublicTypeComponentInstance, INode> | null {
     if (!target) {
       return null;
     }
 
-    const nodeIntance = this.getClosestNodeInstance(target);
-    if (!nodeIntance) {
+    const nodeInstance = this.getClosestNodeInstance(target);
+    if (!nodeInstance) {
       return null;
     }
-    const { docId } = nodeIntance;
+    const { docId } = nodeInstance;
     const doc = this.project.getDocument(docId)!;
-    const node = doc.getNode(nodeIntance.nodeId);
+    const node = doc.getNode(nodeInstance.nodeId);
     return {
-      ...nodeIntance,
+      ...nodeInstance,
       node,
     };
   }
@@ -1179,13 +1188,14 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
    */
   locate(e: ILocateEvent): any {
     const { dragObject } = e;
-    const { nodes } = dragObject as IPublicTypeDragNodeObject;
+
+    const nodes = dragObject?.nodes;
 
     const operationalNodes = nodes?.filter((node) => {
       const onMoveHook = node.componentMeta?.advanced.callbacks?.onMoveHook;
       const canMove = onMoveHook && typeof onMoveHook === 'function' ? onMoveHook(node.internalToShellNode()) : true;
 
-      let parentContainerNode: Node | null = null;
+      let parentContainerNode: INode | null = null;
       let parentNode = node.parent;
 
       while (parentNode) {
@@ -1215,7 +1225,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
       return null;
     }
     const dropContainer = this.getDropContainer(e);
-    const lockedNode = getClosestNode(dropContainer?.container as Node, (node) => node.isLocked);
+    const lockedNode = getClosestNode(dropContainer?.container, (node) => node.isLocked);
     if (lockedNode) return null;
     if (
       !dropContainer
@@ -1247,7 +1257,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
     };
 
     const locationData = {
-      target: container as INode,
+      target: container,
       detail,
       source: `simulator${document.id}`,
       event: e,
@@ -1257,7 +1267,8 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
       e.dragObject &&
       e.dragObject.nodes &&
       e.dragObject.nodes.length &&
-      e.dragObject.nodes[0].componentMeta.isModal
+      e.dragObject.nodes[0].componentMeta.isModal &&
+      document.focusNode
     ) {
       return this.designer.createLocation({
         target: document.focusNode,
@@ -1271,12 +1282,12 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
       return this.designer.createLocation(locationData);
     }
 
-    let nearRect = null;
-    let nearIndex = 0;
-    let nearNode = null;
-    let nearDistance = null;
-    let minTop = null;
-    let maxBottom = null;
+    let nearRect: IPublicTypeRect | null = null;
+    let nearIndex: number = 0;
+    let nearNode: INode | null = null;
+    let nearDistance: number | null = null;
+    let minTop: number | null = null;
+    let maxBottom: number | null = null;
 
     for (let i = 0, l = children.size; i < l; i++) {
       const node = children.get(i)!;
@@ -1333,8 +1344,13 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
       const vertical = inline || row;
 
       // TODO: fix type
-      const near: any = {
-        node: nearNode,
+      const near: {
+        node: IPublicModelNode;
+        pos: 'before' | 'after' | 'replace';
+        rect?: IPublicTypeRect;
+        align?: 'V' | 'H';
+      } = {
+        node: nearNode.internalToShellNode()!,
         pos: 'before',
         align: vertical ? 'V' : 'H',
       };
@@ -1372,8 +1388,8 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
     const isAny = isDragAnyObject(dragObject);
     const document = this.project.currentDocument!;
     const { currentRoot } = document;
-    let container: INode;
-    let nodeInstance: IPublicTypeNodeInstance<IPublicTypeComponentInstance> | undefined;
+    let container: INode | null;
+    let nodeInstance: IPublicTypeNodeInstance<IPublicTypeComponentInstance, INode> | undefined;
 
     if (target) {
       const ref = this.getNodeInstanceFromElement(target);
@@ -1391,8 +1407,8 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
       container = currentRoot;
     }
 
-    if (!container.isParental()) {
-      container = container.parent || currentRoot;
+    if (!container?.isParental()) {
+      container = container?.parent || currentRoot;
     }
 
     // TODO: use spec container to accept specialData
@@ -1402,7 +1418,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
     }
 
     // get common parent, avoid drop container contains by dragObject
-    const drillDownExcludes = new Set<Node>();
+    const drillDownExcludes = new Set<INode>();
     if (isDragNodeObject(dragObject)) {
       const { nodes } = dragObject;
       let i = nodes.length;
@@ -1414,7 +1430,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
       }
       if (p !== container) {
         container = p || document.focusNode;
-        drillDownExcludes.add(container);
+        container && drillDownExcludes.add(container);
       }
     }
 
@@ -1425,11 +1441,11 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
       } else {
         instance = this.getClosestNodeInstance(
           nodeInstance.instance as any,
-          container.id,
+          container?.id,
         )?.instance;
       }
     } else {
-      instance = this.getComponentInstances(container)?.[0];
+      instance = container && this.getComponentInstances(container)?.[0];
     }
 
     let dropContainer: DropContainer = {
@@ -1457,7 +1473,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
           container = container.parent;
           instance = this.getClosestNodeInstance(dropContainer.instance, container.id)?.instance;
           dropContainer = {
-            container: container as INode,
+            container,
             instance,
           };
         } else {
@@ -1475,12 +1491,12 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
   /**
    * 控制接受
    */
-  handleAccept({ container, instance }: DropContainer, e: ILocateEvent): boolean {
+  handleAccept({ container }: DropContainer, e: ILocateEvent): boolean {
     const { dragObject } = e;
     const document = this.currentDocument!;
-    const focusNode = document.focusNode;
+    const { focusNode } = document;
     if (isRootNode(container) || container.contains(focusNode)) {
-      return document.checkNesting(focusNode, dragObject as any);
+      return document.checkNesting(focusNode!, dragObject as any);
     }
 
     const meta = (container as Node).componentMeta;
@@ -1500,16 +1516,13 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
    */
   getNearByContainer(
     { container, instance }: DropContainer,
-    drillDownExcludes: Set<Node>,
-    e: ILocateEvent,
+    drillDownExcludes: Set<INode>,
   ) {
     const { children } = container;
-    const document = this.project.currentDocument!;
     if (!children || children.isEmpty()) {
       return null;
     }
 
-    const nearDistance: any = null;
     const nearBy: any = null;
     for (let i = 0, l = children.size; i < l; i++) {
       let child = children.get(i);
@@ -1519,7 +1532,7 @@ export class BuiltinSimulatorHost implements ISimulatorHost<BuiltinSimulatorProp
       }
       if (child.conditionGroup) {
         const bn = child.conditionGroup;
-        i = bn.index + bn.length - 1;
+        i = (bn.index || 0) + bn.length - 1;
         child = bn.visibleNode;
       }
       if (!child.isParental() || drillDownExcludes.has(child)) {

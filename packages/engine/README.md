@@ -14,7 +14,7 @@ An enterprise-class low-code technology stack with scale-out design
 
 [![][issues-helper-image]][issues-helper-url] [![Issues need help][help-wanted-image]][help-wanted-url]
 
-[![codecov][codecov-image-url]][codecov-url]
+[![codecov][codecov-image-url]][codecov-url] [![Awesome](https://cdn.rawgit.com/sindresorhus/awesome/d7305f38d29fed78fa85652e3a63e154dd8e8829/media/badge.svg)](https://github.com/lowcode-workspace/awesome-lowcode-engine)
 
 [![](https://img.shields.io/badge/LowCodeEngine-Check%20Your%20Contribution-orange)](https://opensource.alibaba.com/contribution_leaderboard/details?projectValue=lowcode-engine)
 
@@ -71,7 +71,7 @@ skeleton.add({
   area: 'topArea',
   type: 'Widget',
   name: 'logo',
-  content: YourFantaticLogo,
+  content: YourFantasticLogo,
   contentProps: {
     logo:
       'https://img.alicdn.com/tfs/TB1_SocGkT2gK0jSZFkXXcIQFXa-66-66.png',
@@ -126,7 +126,7 @@ https://cdn.jsdelivr.net/npm/@alilc/lowcode-react-simulator-renderer@1.0.18/dist
 ```
 
 #### Method 5: Use your own cdn
-Pass the files under packages/engine/dist and packages/(react|rax)-simulator-renderer/dist in the source code to your cdn provider
+Pass the files under packages/engine/dist and packages/react-simulator-renderer/dist in the source code to your cdn provider
 
 ## 🔗 Related Links
 

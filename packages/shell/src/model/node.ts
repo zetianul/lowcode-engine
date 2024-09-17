@@ -27,8 +27,13 @@ import { ComponentMeta as ShellComponentMeta } from './component-meta';
 import { SettingTopEntry as ShellSettingTopEntry } from './setting-top-entry';
 import { documentSymbol, nodeSymbol } from '../symbols';
 import { ReactElement } from 'react';
+import { ConditionGroup } from './condition-group';
 
 const shellNodeSymbol = Symbol('shellNodeSymbol');
+
+function isShellNode(node: any): node is IPublicModelNode {
+  return node[shellNodeSymbol];
+}
 
 export class Node implements IPublicModelNode {
   private readonly [documentSymbol]: InnerDocumentModel | null;
@@ -289,7 +294,7 @@ export class Node implements IPublicModelNode {
   /**
    * 当前节点为插槽节点时，返回节点对应的属性实例
    */
-  get slotFor(): IPublicModelProp | null {
+  get slotFor(): IPublicModelProp | null | undefined {
     return ShellProp.create(this[nodeSymbol].slotFor);
   }
 
@@ -325,12 +330,12 @@ export class Node implements IPublicModelNode {
     this._id = this[nodeSymbol].id;
   }
 
-  static create(node: InnerNode | null | undefined): IPublicModelNode | null {
+  static create(node: InnerNode | IPublicModelNode | null | undefined): IPublicModelNode | null {
     if (!node) {
       return null;
     }
     // @ts-ignore 直接返回已挂载的 shell node 实例
-    if (node[shellNodeSymbol]) {
+    if (isShellNode(node)) {
       return (node as any)[shellNodeSymbol];
     }
     const shellNode = new Node(node);
@@ -349,7 +354,6 @@ export class Node implements IPublicModelNode {
 
   /**
    * 获取节点实例对应的 dom 节点
-   * @deprecated
    */
   getDOMNode() {
     return (this[nodeSymbol] as any).getDOMNode();
@@ -641,7 +645,7 @@ export class Node implements IPublicModelNode {
    * @since v1.1.0
    */
   get conditionGroup(): IPublicModelExclusiveGroup | null {
-    return this[nodeSymbol].conditionGroup;
+    return ConditionGroup.create(this[nodeSymbol].conditionGroup);
   }
 
   /**
@@ -650,5 +654,25 @@ export class Node implements IPublicModelNode {
    */
   setConditionalVisible(): void {
     this[nodeSymbol].setConditionalVisible();
+  }
+
+  getRGL() {
+    const {
+      isContainerNode,
+      isEmptyNode,
+      isRGLContainerNode,
+      isRGLNode,
+      isRGL,
+      rglNode,
+    } = this[nodeSymbol].getRGL();
+
+    return {
+      isContainerNode,
+      isEmptyNode,
+      isRGLContainerNode,
+      isRGLNode,
+      isRGL,
+      rglNode: Node.create(rglNode),
+    };
   }
 }

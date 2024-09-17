@@ -16,6 +16,10 @@ import {
   IPublicApiPlugins,
   IPublicTypePluginDeclaration,
   IPublicApiCanvas,
+  IPublicApiWorkspace,
+  IPublicEnumPluginRegisterLevel,
+  IPublicModelWindow,
+  IPublicApiCommonUI,
 } from '@alilc/lowcode-types';
 import {
   IPluginContextOptions,
@@ -24,8 +28,8 @@ import {
 } from './plugin-types';
 import { isValidPreferenceKey } from './plugin-utils';
 
-
-export default class PluginContext implements IPublicModelPluginContext, ILowCodePluginContextPrivate {
+export default class PluginContext implements
+  IPublicModelPluginContext, ILowCodePluginContextPrivate {
   hotkey: IPublicApiHotkey;
   project: IPublicApiProject;
   skeleton: IPublicApiSkeleton;
@@ -39,6 +43,11 @@ export default class PluginContext implements IPublicModelPluginContext, ILowCod
   preference: IPluginPreferenceMananger;
   pluginEvent: IPublicApiEvent;
   canvas: IPublicApiCanvas;
+  workspace: IPublicApiWorkspace;
+  registerLevel: IPublicEnumPluginRegisterLevel;
+  editorWindow: IPublicModelWindow;
+  commonUI: IPublicApiCommonUI;
+  isPluginRegisteredInWorkspace: false;
 
   constructor(
       options: IPluginContextOptions,

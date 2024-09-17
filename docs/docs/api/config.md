@@ -1,6 +1,6 @@
 ---
 title: config - 配置 API
-sidebar_position: 8
+sidebar_position: 5
 ---
 
 > **@types** [IPublicModelEngineConfig](https://github.com/alibaba/lowcode-engine/blob/main/packages/types/src/shell/model/engine-config.ts)<br/>
@@ -24,7 +24,7 @@ sidebar_position: 8
  */
 get(key: string, defaultValue?: any): any;
 ```
-#### 示例
+**示例**
 ```typescript
 import { config } from '@alilc/lowcode-engine';
 
@@ -43,7 +43,7 @@ config.get('keyB', { a: 1 });
  */
 set(key: string, value: any): void;
 ```
-#### 示例
+**示例**
 ```typescript
 import { config } from '@alilc/lowcode-engine';
 
@@ -63,7 +63,7 @@ config.set('keyC', 1);
 has(key: string): boolean;
 ```
 
-#### 示例
+**示例**
 ```typescript
 import { config } from '@alilc/lowcode-engine';
 
@@ -81,7 +81,7 @@ config.has('keyD');
  */
 setConfig(config: { [key: string]: any }): void;
 ```
-#### 示例
+**示例**
 ```typescript
 import { config } from '@alilc/lowcode-engine';
 
@@ -105,6 +105,17 @@ getPreference(): IPublicModelPreference;
 
 **@since v1.1.0**
 
+示例
+
+```javascript
+import { config } from '@alilc/lowcode-engine';
+
+const panelName = 'outline-master-pane';
+
+// 设置大纲树面板钉住，在大纲树下次重新打开时生效
+config.getPreference().set(`${panelName}-pinned-status-isFloat`, false, 'skeleton')
+```
+
 ## 事件
 
 ### onceGot
@@ -123,7 +134,7 @@ getPreference(): IPublicModelPreference;
  */
 onceGot(key: string): Promise<any>;
 ```
-#### 示例
+**示例**
 ```typescript
 import { config } from '@alilc/lowcode-engine';
 
@@ -149,7 +160,7 @@ const value = await config.onceGot('keyA');
    */
   onGot(key: string, fn: (data: any) => void): () => void;
 ```
-#### 示例
+**示例**
 ```typescript
 import { config } from '@alilc/lowcode-engine';
 

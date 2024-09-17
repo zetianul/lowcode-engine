@@ -1,8 +1,11 @@
 import { ReactElement } from 'react';
 import { IPublicTypeDisposable, IPublicTypeNodeSchema } from '../type';
 import { IPublicModelResource } from './resource';
+import { IPublicModelEditorView } from './editor-view';
 
-export interface IPublicModelWindow {
+export interface IPublicModelWindow<
+  Resource = IPublicModelResource
+> {
 
   /** 窗口 id */
   id: string;
@@ -14,7 +17,19 @@ export interface IPublicModelWindow {
   icon?: ReactElement;
 
   /** 窗口资源类型 */
-  resource?: IPublicModelResource;
+  resource?: Resource;
+
+  /**
+   * 窗口当前视图
+   * @since v1.1.7
+   */
+  currentEditorView: IPublicModelEditorView | null;
+
+  /**
+   * 窗口全部视图实例
+   * @since v1.1.7
+   */
+  editorViews: IPublicModelEditorView[];
 
   /** 当前窗口导入 schema */
   importSchema(schema: IPublicTypeNodeSchema): void;
@@ -27,4 +42,10 @@ export interface IPublicModelWindow {
 
   /** 窗口视图变更事件 */
   onChangeViewType(fn: (viewName: string) => void): IPublicTypeDisposable;
+
+  /**
+   * 窗口视图保存事件
+   * @since 1.1.7
+   */
+  onSave(fn: () => void): IPublicTypeDisposable;
 }

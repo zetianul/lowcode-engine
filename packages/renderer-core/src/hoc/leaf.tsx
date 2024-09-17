@@ -4,6 +4,7 @@ import { isReactComponent, cloneEnumerableProperty } from '@alilc/lowcode-utils'
 import { debounce } from '../utils/common';
 import adapter from '../adapter';
 import * as types from '../types/index';
+import logger from '../utils/logger';
 
 export interface IComponentHocInfo {
   schema: any;
@@ -102,6 +103,9 @@ function initRerenderEvent({
     return;
   }
   cache.event.get(schema.id)?.dispose.forEach((disposeFn: any) => disposeFn && disposeFn());
+  const debounceRerender = debounce(() => {
+    container.rerender();
+  }, 20);
   cache.event.set(schema.id, {
     clear: false,
     leaf,
@@ -111,21 +115,21 @@ function initRerenderEvent({
           return;
         }
         __debug(`${schema.componentName}[${schema.id}] leaf not render in SimulatorRendererView, leaf onPropsChange make rerender`);
-        container.rerender();
+        debounceRerender();
       }),
       leaf?.onChildrenChange?.(() => {
         if (!container.autoRepaintNode) {
           return;
         }
         __debug(`${schema.componentName}[${schema.id}] leaf not render in SimulatorRendererView, leaf onChildrenChange make rerender`);
-        container.rerender();
+        debounceRerender();
       }) as Function,
       leaf?.onVisibleChange?.(() => {
         if (!container.autoRepaintNode) {
           return;
         }
         __debug(`${schema.componentName}[${schema.id}] leaf not render in SimulatorRendererView, leaf onVisibleChange make rerender`);
-        container.rerender();
+        debounceRerender();
       }),
     ],
   });
@@ -180,7 +184,7 @@ export function leafWrapper(Comp: types.IBaseRenderComponent, {
   }
 
   if (!isReactComponent(Comp)) {
-    console.error(`${schema.componentName} component may be has errors: `, Comp);
+    logger.error(`${schema.componentName} component may be has errors: `, Comp);
   }
 
   initRerenderEvent({
@@ -190,8 +194,8 @@ export function leafWrapper(Comp: types.IBaseRenderComponent, {
     getNode,
   });
 
-  if (curDocumentId && cache.component.has(componentCacheId)) {
-    return cache.component.get(componentCacheId);
+  if (curDocumentId && cache.component.has(componentCacheId) && (cache.component.get(componentCacheId).Comp === Comp)) {
+    return cache.component.get(componentCacheId).LeafWrapper;
   }
 
   class LeafHoc extends Component {
@@ -518,16 +522,11 @@ export function leafWrapper(Comp: types.IBaseRenderComponent, {
     }
 
     get hasChildren(): boolean {
-      let { children } = this.props;
-      if (this.state.childrenInState) {
-        children = this.state.nodeChildren;
+      if (!this.state.childrenInState) {
+        return 'children' in this.props;
       }
 
-      if (Array.isArray(children)) {
-        return Boolean(children && children.length);
-      }
-
-      return Boolean(children);
+      return true;
     }
 
     get children(): any {
@@ -540,7 +539,7 @@ export function leafWrapper(Comp: types.IBaseRenderComponent, {
       if (this.props.children && this.props.children.length) {
         return this.props.children;
       }
-      return [];
+      return this.props.children;
     }
 
     get leaf(): INode | undefined {
@@ -573,7 +572,11 @@ export function leafWrapper(Comp: types.IBaseRenderComponent, {
 
       delete compProps.__inner__;
 
-      return engine.createElement(Comp, compProps, this.hasChildren ? this.children : null);
+      if (this.hasChildren) {
+        return engine.createElement(Comp, compProps, this.children);
+      }
+
+      return engine.createElement(Comp, compProps);
     }
   }
 
@@ -588,7 +591,10 @@ export function leafWrapper(Comp: types.IBaseRenderComponent, {
 
   LeafWrapper.displayName = (Comp as any).displayName;
 
-  cache.component.set(componentCacheId, LeafWrapper);
+  cache.component.set(componentCacheId, {
+    LeafWrapper,
+    Comp,
+  });
 
   return LeafWrapper;
 }

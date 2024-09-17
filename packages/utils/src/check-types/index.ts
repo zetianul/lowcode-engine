@@ -21,3 +21,8 @@ export * from './is-location-children-detail';
 export * from './is-node';
 export * from './is-location-data';
 export * from './is-setting-field';
+export * from './is-lowcode-component-type';
+export * from './is-lowcode-project-schema';
+export * from './is-component-schema';
+export * from './is-basic-prop-type';
+export * from './is-required-prop-type';

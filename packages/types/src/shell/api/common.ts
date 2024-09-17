@@ -1,9 +1,10 @@
 
 import { Component, ReactNode } from 'react';
-import { IPublicTypeNodeSchema } from '../type';
+import { IPublicTypeI18nData, IPublicTypeNodeSchema, IPublicTypeTitleContent } from '../type';
 import { IPublicEnumTransitionType } from '../enum';
 
 export interface IPublicApiCommonUtils {
+
   /**
    * 是否为合法的 schema 结构
    * check if data is valid NodeSchema
@@ -68,8 +69,14 @@ export interface IPublicApiCommonUtils {
     getLocale(): string;
     setLocale(locale: string): void;
   };
+
+  /**
+   * i18n 转换方法
+   */
+  intl(data: IPublicTypeI18nData | string, params?: object): string;
 }
 export interface IPublicApiCommonSkeletonCabin {
+
   /**
    * 编辑器框架 View
    * get Workbench Component
@@ -78,16 +85,22 @@ export interface IPublicApiCommonSkeletonCabin {
 }
 
 export interface IPublicApiCommonEditorCabin {
+
   /**
    * Title 组件
    * @experimental unstable API, pay extra caution when trying to use this
    */
-  get Tip(): Component;
+  get Tip(): React.ComponentClass<{}>;
+
   /**
    * Tip 组件
    * @experimental unstable API, pay extra caution when trying to use this
    */
-  get Title(): Component;
+  get Title(): React.ComponentClass<{
+    title: IPublicTypeTitleContent | undefined;
+    match?: boolean;
+    keywords?: string | null;
+  }>;
 }
 
 export interface IPublicApiCommonDesignerCabin {

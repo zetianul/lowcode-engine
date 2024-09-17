@@ -1,4 +1,4 @@
-import { editorSymbol, skeletonSymbol, designerCabinSymbol, designerSymbol } from '../symbols';
+import { editorSymbol, skeletonSymbol, designerCabinSymbol, designerSymbol, settingFieldSymbol, editorCabinSymbol, skeletonCabinSymbol } from '../symbols';
 import {
   isFormEvent as innerIsFormEvent,
   compatibleLegaoSchema as innerCompatibleLegaoSchema,
@@ -25,6 +25,8 @@ import {
   IPublicTypeLocationDetailType as InnerLocationDetailType,
   IPublicApiCommonEditorCabin,
   IPublicModelDragon,
+  IPublicModelSettingField,
+  IPublicTypeI18nData,
 } from '@alilc/lowcode-types';
 import {
   SettingField as InnerSettingField,
@@ -35,6 +37,11 @@ import {
   getConvertedExtraKey as innerGetConvertedExtraKey,
   getOriginalExtraKey as innerGetOriginalExtraKey,
   IDesigner,
+  DropLocation as InnerDropLocation,
+  Designer as InnerDesigner,
+  Node as InnerNode,
+  LowCodePluginManager as InnerLowCodePluginManager,
+  DesignerView as InnerDesignerView,
 } from '@alilc/lowcode-designer';
 import {
   Skeleton as InnerSkeleton,
@@ -42,6 +49,8 @@ import {
   PopupContext as InnerPopupContext,
   PopupPipe as InnerPopupPipe,
   Workbench as InnerWorkbench,
+  SettingsPrimaryPane as InnerSettingsPrimaryPane,
+  registerDefaults as InnerRegisterDefaults,
 } from '@alilc/lowcode-editor-skeleton';
 import {
   Editor,
@@ -57,9 +66,13 @@ import {
   untracked as innerUntracked,
   computed as innerComputed,
   observer as innerObserver,
+  action as innerAction,
+  runInAction as innerRunInAction,
+  engineConfig as innerEngineConfig,
+  globalContext,
 } from '@alilc/lowcode-editor-core';
 import { Dragon as ShellDragon } from '../model';
-import { ReactNode, Component } from 'react';
+import { ReactNode } from 'react';
 
 class DesignerCabin implements IPublicApiCommonDesignerCabin {
   private readonly [editorSymbol]: Editor;
@@ -90,6 +103,11 @@ class DesignerCabin implements IPublicApiCommonDesignerCabin {
       DragObjectType: InnerDragObjectType,
       isDragNodeDataObject: innerIsDragNodeDataObject,
       isNode: innerIsNode,
+      DropLocation: InnerDropLocation,
+      Designer: InnerDesigner,
+      Node: InnerNode,
+      LowCodePluginManager: InnerLowCodePluginManager,
+      DesignerView: InnerDesignerView,
     };
   }
 
@@ -156,8 +174,19 @@ class DesignerCabin implements IPublicApiCommonDesignerCabin {
 class SkeletonCabin implements IPublicApiCommonSkeletonCabin {
   private readonly [skeletonSymbol]: InnerSkeleton;
 
+  readonly [skeletonCabinSymbol]: any;
+
   constructor(skeleton: InnerSkeleton) {
     this[skeletonSymbol] = skeleton;
+    this[skeletonCabinSymbol] = {
+      Workbench: InnerWorkbench,
+      createSettingFieldView: this.createSettingFieldView,
+      PopupContext: InnerPopupContext,
+      PopupPipe: InnerPopupPipe,
+      SettingsPrimaryPane: InnerSettingsPrimaryPane,
+      registerDefaults: InnerRegisterDefaults,
+      Skeleton: InnerSkeleton,
+    };
   }
 
   get Workbench(): any {
@@ -168,8 +197,8 @@ class SkeletonCabin implements IPublicApiCommonSkeletonCabin {
   /**
    * @deprecated
    */
-  createSettingFieldView(item: any, field: any) {
-    return innerCreateSettingFieldView(item, field);
+  createSettingFieldView(field: IPublicModelSettingField, fieldEntry: any) {
+    return innerCreateSettingFieldView((field as any)[settingFieldSymbol] || field, fieldEntry);
   }
 
   /**
@@ -233,20 +262,49 @@ class Utils implements IPublicApiCommonUtils {
     } {
     return innerCreateIntl(instance);
   }
+
+  intl(data: IPublicTypeI18nData | string, params?: object): any {
+    return innerIntl(data, params);
+  }
 }
 
 class EditorCabin implements IPublicApiCommonEditorCabin {
   private readonly [editorSymbol]: Editor;
 
+  /**
+   * @deprecated
+   */
+  readonly [editorCabinSymbol]: any;
+
   constructor(editor: Editor) {
     this[editorSymbol] = editor;
+    this[editorCabinSymbol] = {
+      Editor,
+      globalContext,
+      runInAction: innerRunInAction,
+      Title: InnerTitle,
+      Tip: InnerTip,
+      shallowIntl: innerShallowIntl,
+      createIntl: innerCreateIntl,
+      intl: innerIntl,
+      createSetterContent: this.createSetterContent.bind(this),
+      globalLocale: innerGlobalLocale,
+      obx: innerObx,
+      action: innerAction,
+      engineConfig: innerEngineConfig,
+      observable: innerObservable,
+      makeObservable: innerMakeObservable,
+      untracked: innerUntracked,
+      computed: innerComputed,
+      observer: innerObserver,
+    };
   }
 
   /**
    * Title 组件
    * @experimental unstable API, pay extra caution when trying to use this
    */
-  get Title(): Component {
+  get Title() {
     return InnerTitle;
   }
 
@@ -254,7 +312,7 @@ class EditorCabin implements IPublicApiCommonEditorCabin {
    * Tip 组件
    * @experimental unstable API, pay extra caution when trying to use this
    */
-  get Tip(): Component {
+  get Tip() {
     return InnerTip;
   }
 
@@ -299,6 +357,27 @@ class EditorCabin implements IPublicApiCommonEditorCabin {
    */
   get obx() {
     return innerObx;
+  }
+
+  /**
+   * @deprecated
+   */
+  get action() {
+    return innerAction;
+  }
+
+  /**
+   * @deprecated
+   */
+  get engineConfig() {
+    return innerEngineConfig;
+  }
+
+  /**
+   * @deprecated
+   */
+  get runInAction() {
+    return innerRunInAction;
   }
 
   /**

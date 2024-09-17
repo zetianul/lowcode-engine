@@ -16,7 +16,7 @@ import {
   IWithDependency,
 } from '../../types';
 
-import { isValidIdentifier, isValidComponentName } from '../../utils/validate';
+import { isValidIdentifier } from '../../utils/validate';
 
 // TODO: main 这个信息到底怎么用，是不是外部包不需要使用？
 const DEP_MAIN_BLOCKLIST = ['lib', 'lib/index', 'es', 'es/index', 'main'];
@@ -261,7 +261,7 @@ function buildPackageImport(
     if (!isValidIdentifier(name)) {
       throw new CodeGeneratorError(`Invalid Identifier [${name}]`);
     }
-    if (info.nodeIdentifier && !isValidComponentName(info.nodeIdentifier)) {
+    if (info.nodeIdentifier && !isValidIdentifier(info.nodeIdentifier)) {
       throw new CodeGeneratorError(`Invalid Identifier [${info.nodeIdentifier}]`);
     }
   });
@@ -443,6 +443,7 @@ function buildPackageImport(
 export interface PluginConfig {
   fileType?: string; // 导出的文件类型
   useAliasName?: boolean; // 是否使用 componentName 重命名组件 identifier
+  filter?: (deps: IDependency[]) => IDependency[]; // 支持过滤能力
 }
 
 const pluginFactory: BuilderComponentPluginFactory<PluginConfig> = (config?: PluginConfig) => {
@@ -460,7 +461,8 @@ const pluginFactory: BuilderComponentPluginFactory<PluginConfig> = (config?: Plu
     const ir = next.ir as IWithDependency;
 
     if (ir && ir.deps && ir.deps.length > 0) {
-      const packs = groupDepsByPack(ir.deps);
+      const deps = cfg.filter ? cfg.filter(ir.deps) : ir.deps;
+      const packs = groupDepsByPack(deps);
 
       Object.keys(packs).forEach((pkg) => {
         const chunks = buildPackageImport(pkg, packs[pkg], cfg.fileType, cfg.useAliasName);

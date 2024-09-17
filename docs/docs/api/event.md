@@ -1,6 +1,6 @@
 ---
 title: event - 事件 API
-sidebar_position: 7
+sidebar_position: 10
 ---
 
 > **@types** [IPublicApiEvent](https://github.com/alibaba/lowcode-engine/blob/main/packages/types/src/shell/api/event.ts)<br/>
@@ -25,6 +25,19 @@ on(event: string, listener: (...args: any[]) => void): IPublicTypeDisposable;
 ```
 相关类型：[IPublicTypeDisposable](https://github.com/alibaba/lowcode-engine/blob/main/packages/types/src/shell/type/disposable.ts)
 
+### prependListener
+监听事件，会在其他回调函数之前执行
+
+```typescript
+/**
+ * 监听事件，会在其他回调函数之前执行
+ * @param event 事件名称
+ * @param listener 事件回调
+ */
+prependListener(event: string, listener: (...args: any[]) => void): IPublicTypeDisposable;
+```
+相关类型：[IPublicTypeDisposable](https://github.com/alibaba/lowcode-engine/blob/main/packages/types/src/shell/type/disposable.ts)
+
 ### off
 取消监听事件
 
@@ -43,12 +56,13 @@ off(event: string, listener: (...args: any[]) => void): void;
 
 ```typescript
 /**
- * 取消监听事件
- * cancel a monitor from a event
+ * 触发事件
+ * emit a message for a event
  * @param event 事件名称
- * @param listener 事件回调
+ * @param args 事件参数
+ * @returns
  */
-off(event: string, listener: (...args: any[]) => void): void;
+emit(event: string, ...args: any[]): void;
 ```
 
 ## 使用示例

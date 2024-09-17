@@ -1,13 +1,36 @@
-import { IPublicTypeEditorView, IPublicModelResource, IPublicResourceData, IPublicResourceTypeConfig } from '@alilc/lowcode-types';
+import { ISkeleton } from '@alilc/lowcode-editor-skeleton';
+import { IPublicTypeEditorView, IPublicResourceData, IPublicResourceTypeConfig, IBaseModelResource, IPublicEnumPluginRegisterLevel } from '@alilc/lowcode-types';
 import { Logger } from '@alilc/lowcode-utils';
-import { BasicContext } from './context/base-context';
-import { ResourceType } from './resource-type';
-import { Workspace as InnerWorkSpace } from './workspace';
+import { BasicContext, IBasicContext } from './context/base-context';
+import { ResourceType, IResourceType } from './resource-type';
+import { IWorkspace } from './workspace';
 
 const logger = new Logger({ level: 'warn', bizName: 'workspace:resource' });
 
-export class Resource implements IPublicModelResource {
-  private context: BasicContext;
+export interface IBaseResource<T> extends IBaseModelResource<T> {
+  readonly resourceType: ResourceType;
+
+  skeleton: ISkeleton;
+
+  description?: string;
+
+  get editorViews(): IPublicTypeEditorView[];
+
+  get defaultViewName(): string | undefined;
+
+  getEditorView(name: string): IPublicTypeEditorView | undefined;
+
+  import(schema: any): Promise<any>;
+
+  save(value: any): Promise<any>;
+
+  url(): Promise<string | undefined>;
+}
+
+export type IResource = IBaseResource<IResource>;
+
+export class Resource implements IResource {
+  private context: IBasicContext;
 
   resourceTypeInstance: IPublicResourceTypeConfig;
 
@@ -17,8 +40,8 @@ export class Resource implements IPublicModelResource {
     return this.resourceType.name;
   }
 
-  get viewType() {
-    return this.resourceData.viewType;
+  get viewName() {
+    return this.resourceData.viewName || (this.resourceData as any).viewType || this.defaultViewName;
   }
 
   get description() {
@@ -37,6 +60,10 @@ export class Resource implements IPublicModelResource {
     return this.resourceData.title || this.resourceTypeInstance.defaultTitle;
   }
 
+  get id(): string | undefined {
+    return this.resourceData.id;
+  }
+
   get options() {
     return this.resourceData.options;
   }
@@ -49,13 +76,17 @@ export class Resource implements IPublicModelResource {
     return this.context.innerSkeleton;
   }
 
-  get children(): Resource[] {
-    return this.resourceData?.children?.map(d => new Resource(d, this.resourceType, this.workspace)) || [];
+  children: IResource[];
+
+  get config() {
+    return this.resourceData.config;
   }
 
-  constructor(readonly resourceData: IPublicResourceData, readonly resourceType: ResourceType, readonly workspace: InnerWorkSpace) {
-    this.context = new BasicContext(workspace, `resource-${resourceData.resourceName || resourceType.name}`);
-    this.resourceTypeInstance = resourceType.resourceTypeModel(this.context, this.options);
+  constructor(readonly resourceData: IPublicResourceData, readonly resourceType: IResourceType, readonly workspace: IWorkspace) {
+    this.context = new BasicContext(workspace, `resource-${resourceData.resourceName || resourceType.name}`, IPublicEnumPluginRegisterLevel.Resource);
+    this.resourceTypeInstance = resourceType.resourceTypeModel(this.context.innerPlugins._getLowCodePluginContext({
+      pluginName: '',
+    }), this.options);
     this.init();
     if (this.resourceTypeInstance.editorViews) {
       this.resourceTypeInstance.editorViews.forEach((d: any) => {
@@ -65,6 +96,7 @@ export class Resource implements IPublicModelResource {
     if (!resourceType) {
       logger.error(`resourceType[${resourceType}] is unValid.`);
     }
+    this.children = this.resourceData?.children?.map(d => new Resource(d, this.workspace.getResourceType(d.resourceName || this.resourceType.name), this.workspace)) || [];
   }
 
   async init() {
@@ -88,8 +120,8 @@ export class Resource implements IPublicModelResource {
     return this.resourceTypeInstance.editorViews;
   }
 
-  get defaultViewType() {
-    return this.resourceTypeInstance.defaultViewType;
+  get defaultViewName() {
+    return this.resourceTypeInstance.defaultViewName || this.resourceTypeInstance.defaultViewType;
   }
 
   getEditorView(name: string) {

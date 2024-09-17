@@ -317,8 +317,8 @@ function getKeyInfo(combination: string, action?: string): KeyInfo {
 function fireCallback(callback: IPublicTypeHotkeyCallback, e: KeyboardEvent, combo?: string, sequence?: string): void {
   try {
     const workspace = globalContext.get('workspace');
-    const editor = workspace.isActive ? workspace.window.editor : globalContext.get('editor');
-    const designer = editor.get('designer');
+    const editor = workspace.isActive ? workspace.window?.editor : globalContext.get('editor');
+    const designer = editor?.get('designer');
     const node = designer?.currentSelection?.getNodes()?.[0];
     const npm = node?.componentMeta?.npm;
     const selected =
@@ -339,8 +339,8 @@ function fireCallback(callback: IPublicTypeHotkeyCallback, e: KeyboardEvent, com
   }
 }
 
-export interface IHotKey extends IPublicApiHotkey {
-
+export interface IHotKey extends Omit<IPublicApiHotkey, 'bind' | 'callbacks'> {
+  activate(activate: boolean): void;
 }
 
 export class Hotkey implements IHotKey {

@@ -3,7 +3,7 @@ import { Editor, engineConfig } from '@alilc/lowcode-editor-core';
 import { Designer } from '../../../../src/designer/designer';
 import { DocumentModel } from '../../../../src/document/document-model';
 import { Prop, isProp, isValidArrayIndex } from '../../../../src/document/node/props/prop';
-import { IPublicEnumTransformStage } from '@alilc/lowcode-types';
+import { GlobalEvent, IPublicEnumTransformStage } from '@alilc/lowcode-types';
 import { shellModelFactory } from '../../../../../engine/src/modules/shell-model-factory';
 
 const slotNodeImportMockFn = jest.fn();
@@ -24,14 +24,24 @@ const mockOwner = {
         remove: slotNodeRemoveMockFn,
       };
     },
-    designer: {},
+    designer: {
+      editor: {
+        eventBus: {
+          emit: jest.fn(),
+        },
+      },
+    },
   },
   isInited: true,
+  emitPropChange: jest.fn(),
+  delete() {},
 };
 
 const mockPropsInst = {
   owner: mockOwner,
+  delete() {},
 };
+
 mockPropsInst.props = mockPropsInst;
 
 describe('Prop 类测试', () => {
@@ -136,7 +146,7 @@ describe('Prop 类测试', () => {
       expect(boolProp.export(IPublicEnumTransformStage.Save)).toBe(true);
       expect(strProp.export(IPublicEnumTransformStage.Save)).toBe('haha');
       expect(numProp.export(IPublicEnumTransformStage.Save)).toBe(1);
-      expect(nullProp.export(IPublicEnumTransformStage.Save)).toBe('');
+      expect(nullProp.export(IPublicEnumTransformStage.Save)).toBe(null);
       expect(nullProp.export(IPublicEnumTransformStage.Serilize)).toBe(null);
       expect(expProp.export(IPublicEnumTransformStage.Save)).toEqual({
         type: 'JSExpression',
@@ -379,7 +389,6 @@ describe('Prop 类测试', () => {
         prop.dispose();
 
         expect(prop._items).toBeNull();
-        expect(prop._maps).toBeNull();
       });
     });
 
@@ -435,7 +444,7 @@ describe('Prop 类测试', () => {
 
       it('should return undefined when all items are undefined', () => {
         prop = new Prop(mockPropsInst, [undefined, undefined], '___loopArgs___');
-        expect(prop.getValue()).toBeUndefined();
+        expect(prop.getValue()).toEqual([undefined, undefined]);
       });
 
       it('迭代器 / map / forEach', () => {
@@ -499,6 +508,59 @@ describe('Prop 类测试', () => {
     expect(slotProp.purged).toBeTruthy();
     slotProp.dispose();
   });
+
+  describe('slotNode-value / setAsSlot', () => {
+    const editor = new Editor();
+    const designer = new Designer({ editor, shellModelFactory });
+    const doc = new DocumentModel(designer.project, {
+      componentName: 'Page',
+      children: [
+        {
+          id: 'div',
+          componentName: 'Div',
+        },
+      ],
+    });
+    const div = doc.getNode('div');
+
+    const slotProp = new Prop(div?.getProps(), {
+      type: 'JSSlot',
+      value: {
+        componentName: 'Slot',
+        id: 'node_oclei5rv2e2',
+        props: {
+          slotName: "content",
+          slotTitle: "主内容"
+        },
+        children: [
+          {
+            componentName: 'Button',
+          }
+        ]
+      },
+    });
+
+    expect(slotProp.slotNode?.componentName).toBe('Slot');
+
+    expect(slotProp.slotNode?.title).toBe('主内容');
+    expect(slotProp.slotNode?.getExtraProp('name')?.getValue()).toBe('content');
+    expect(slotProp.slotNode?.export()?.id).toBe('node_oclei5rv2e2');
+
+    slotProp.export();
+
+    // Save
+    expect(slotProp.export()?.value[0].componentName).toBe('Button');
+    expect(slotProp.export()?.title).toBe('主内容');
+    expect(slotProp.export()?.name).toBe('content');
+
+    // Render
+    expect(slotProp.export(IPublicEnumTransformStage.Render)?.value.children[0].componentName).toBe('Button');
+    expect(slotProp.export(IPublicEnumTransformStage.Render)?.value.componentName).toBe('Slot');
+
+    slotProp.purge();
+    expect(slotProp.purged).toBeTruthy();
+    slotProp.dispose();
+  });
 });
 
 describe('其他导出函数', () => {
@@ -510,5 +572,126 @@ describe('其他导出函数', () => {
     expect(isValidArrayIndex('1')).toBeTruthy();
     expect(isValidArrayIndex('1', 2)).toBeTruthy();
     expect(isValidArrayIndex('2', 1)).toBeFalsy();
+  });
+});
+
+describe('setValue with event', () => {
+  let propInstance;
+  let mockEmitChange;
+  let mockEventBusEmit;
+  let mockEmitPropChange;
+
+  beforeEach(() => {
+    // Initialize the instance of your class
+    propInstance = new Prop(mockPropsInst, true, 'stringProp');;
+
+    // Mock necessary methods and properties
+    mockEmitChange = jest.spyOn(propInstance, 'emitChange');
+    propInstance.owner = {
+      document: {
+        designer: {
+          editor: {
+            eventBus: {
+              emit: jest.fn(),
+            },
+          },
+        },
+      },
+      emitPropChange: jest.fn(),
+      delete() {},
+    };
+    mockEventBusEmit = jest.spyOn(propInstance.owner.document.designer.editor.eventBus, 'emit');
+    mockEmitPropChange = jest.spyOn(propInstance.owner, 'emitPropChange');
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should correctly handle string values and emit changes', () => {
+    const oldValue = propInstance._value;
+    const newValue = 'new string value';
+
+    propInstance.setValue(newValue);
+
+    const expectedPartialPropsInfo = expect.objectContaining({
+      key: propInstance.key,
+      newValue, // You can specifically test only certain keys
+      oldValue,
+    });
+
+    expect(propInstance.getValue()).toBe(newValue);
+    expect(propInstance.type).toBe('literal');
+    expect(mockEmitChange).toHaveBeenCalledWith({ oldValue });
+    expect(mockEventBusEmit).toHaveBeenCalledWith(GlobalEvent.Node.Prop.InnerChange, expectedPartialPropsInfo);
+    expect(mockEmitPropChange).toHaveBeenCalledWith(expectedPartialPropsInfo);
+  });
+
+  it('should handle object values and set type to map', () => {
+    const oldValue = propInstance._value;
+    const newValue = 234;
+
+    const expectedPartialPropsInfo = expect.objectContaining({
+      key: propInstance.key,
+      newValue, // You can specifically test only certain keys
+      oldValue,
+    });
+
+    propInstance.setValue(newValue);
+
+    expect(propInstance.getValue()).toEqual(newValue);
+    expect(propInstance.type).toBe('literal');
+    expect(mockEmitChange).toHaveBeenCalledWith({ oldValue });
+    expect(mockEventBusEmit).toHaveBeenCalledWith(GlobalEvent.Node.Prop.InnerChange, expectedPartialPropsInfo);
+    expect(mockEmitPropChange).toHaveBeenCalledWith(expectedPartialPropsInfo);
+  });
+
+  it('should has event when unset call', () => {
+    const oldValue = propInstance._value;
+
+    propInstance.unset();
+
+    const expectedPartialPropsInfo = expect.objectContaining({
+      key: propInstance.key,
+      newValue: undefined, // You can specifically test only certain keys
+      oldValue,
+    });
+
+    expect(propInstance.getValue()).toEqual(undefined);
+    expect(propInstance.type).toBe('unset');
+    expect(mockEmitChange).toHaveBeenCalledWith({
+      oldValue,
+      newValue: undefined,
+    });
+    expect(mockEventBusEmit).toHaveBeenCalledWith(GlobalEvent.Node.Prop.InnerChange, expectedPartialPropsInfo);
+    expect(mockEmitPropChange).toHaveBeenCalledWith(expectedPartialPropsInfo);
+
+    propInstance.unset();
+    expect(mockEmitChange).toHaveBeenCalledTimes(1);
+  });
+
+  // remove
+  it('should has event when remove call', () => {
+    const oldValue = propInstance._value;
+
+    propInstance.remove();
+
+    const expectedPartialPropsInfo = expect.objectContaining({
+      key: propInstance.key,
+      newValue: undefined, // You can specifically test only certain keys
+      oldValue,
+    });
+
+    expect(propInstance.getValue()).toEqual(undefined);
+    // expect(propInstance.type).toBe('unset');
+    expect(mockEmitChange).toHaveBeenCalledWith({
+      oldValue,
+      newValue: undefined,
+    });
+    expect(mockEventBusEmit).toHaveBeenCalledWith(GlobalEvent.Node.Prop.InnerChange, expectedPartialPropsInfo);
+    expect(mockEmitPropChange).toHaveBeenCalledWith(expectedPartialPropsInfo);
+
+    propInstance.remove();
+    expect(mockEmitChange).toHaveBeenCalledTimes(1);
   });
 });

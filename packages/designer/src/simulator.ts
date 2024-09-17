@@ -1,8 +1,9 @@
 import { ComponentType } from 'react';
-import { IPublicTypeComponentMetadata, IPublicTypeNodeSchema, IPublicTypeScrollable, IPublicTypeComponentInstance, IPublicModelSensor, IPublicTypeNodeInstance } from '@alilc/lowcode-types';
-import { Point, ScrollTarget, ILocateEvent } from './designer';
+import { IPublicTypeComponentMetadata, IPublicTypeNodeSchema, IPublicTypeScrollable, IPublicTypeComponentInstance, IPublicModelSensor, IPublicTypeNodeInstance, IPublicTypePackage } from '@alilc/lowcode-types';
+import { Point, ScrollTarget, ILocateEvent, IDesigner } from './designer';
 import { BuiltinSimulatorRenderer } from './builtin-simulator/renderer';
-import { Node, INode } from './document';
+import { INode } from './document';
+import { IProject } from './project';
 
 export type AutoFit = '100%';
 // eslint-disable-next-line no-redeclare
@@ -78,7 +79,7 @@ export interface DropContainer {
 /**
  * 模拟器控制进程协议
  */
-export interface ISimulatorHost<P = object> extends IPublicModelSensor {
+export interface ISimulatorHost<P = object> extends IPublicModelSensor<INode> {
   readonly isSimulator: true;
 
   /**
@@ -88,6 +89,10 @@ export interface ISimulatorHost<P = object> extends IPublicModelSensor {
   readonly contentWindow?: Window;
   readonly contentDocument?: Document;
   readonly renderer?: BuiltinSimulatorRenderer;
+
+  readonly project: IProject;
+
+  readonly designer: IDesigner;
 
   // dependsAsset // like react jQuery lodash
   // themesAsset
@@ -132,7 +137,7 @@ export interface ISimulatorHost<P = object> extends IPublicModelSensor {
   /**
    * 滚动视口到节点
    */
-  scrollToNode(node: Node, detail?: any): void;
+  scrollToNode(node: INode, detail?: any): void;
 
   /**
    * 描述组件
@@ -147,7 +152,7 @@ export interface ISimulatorHost<P = object> extends IPublicModelSensor {
   /**
    * 根据节点获取节点的组件实例
    */
-  getComponentInstances(node: Node): IPublicTypeComponentInstance[] | null;
+  getComponentInstances(node: INode): IPublicTypeComponentInstance[] | null;
 
   /**
    * 根据 schema 创建组件类
@@ -157,11 +162,11 @@ export interface ISimulatorHost<P = object> extends IPublicModelSensor {
   /**
    * 根据节点获取节点的组件运行上下文
    */
-  getComponentContext(node: Node): object | null;
+  getComponentContext(node: INode): object | null;
 
   getClosestNodeInstance(from: IPublicTypeComponentInstance, specId?: string): IPublicTypeNodeInstance | null;
 
-  computeRect(node: Node): DOMRect | null;
+  computeRect(node: INode): DOMRect | null;
 
   computeComponentInstanceRect(instance: IPublicTypeComponentInstance, selector?: string): DOMRect | null;
 
@@ -177,6 +182,8 @@ export interface ISimulatorHost<P = object> extends IPublicModelSensor {
    * 销毁
    */
   purge(): void;
+
+  setupComponents(library: IPublicTypePackage[]): Promise<void>;
 }
 
 export function isSimulatorHost(obj: any): obj is ISimulatorHost {
@@ -189,6 +196,6 @@ export function isSimulatorHost(obj: any): obj is ISimulatorHost {
 export type Component = ComponentType<any> | object;
 
 export interface INodeSelector {
-  node: Node;
+  node: INode;
   instance?: IPublicTypeComponentInstance;
 }

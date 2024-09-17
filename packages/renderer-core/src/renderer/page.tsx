@@ -1,5 +1,8 @@
+import { getLogger } from '@alilc/lowcode-utils';
 import baseRendererFactory from './base';
 import { IBaseRendererProps, IBaseRenderComponent } from '../types';
+
+const logger = getLogger({ level: 'warn', bizName: 'renderer-core:page' });
 
 export default function pageRendererFactory(): IBaseRenderComponent {
   const BaseRenderer = baseRendererFactory();
@@ -15,7 +18,7 @@ export default function pageRendererFactory(): IBaseRenderComponent {
       const schema = props.__schema || {};
       this.state = this.__parseData(schema.state || {});
       this.__initDataSource(props);
-      this.__excuteLifeCycleMethod('constructor', [props, ...rest]);
+      this.__executeLifeCycleMethod('constructor', [props, ...rest]);
     }
 
     async componentDidUpdate(prevProps: IBaseRendererProps, _prevState: {}, snapshot: unknown) {
@@ -27,6 +30,11 @@ export default function pageRendererFactory(): IBaseRenderComponent {
       }
 
       super.componentDidUpdate?.(prevProps, _prevState, snapshot);
+    }
+
+    setState(state: any, callback?: () => void) {
+      logger.info('page set state', state);
+      super.setState(state, callback);
     }
 
     render() {
@@ -43,7 +51,6 @@ export default function pageRendererFactory(): IBaseRenderComponent {
         page: this,
       });
       this.__render();
-
 
       const { Page } = __components;
       if (Page) {

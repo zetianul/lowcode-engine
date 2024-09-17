@@ -1,5 +1,5 @@
 import {
-  LowCodePluginManager,
+  ILowCodePluginManager,
 } from '@alilc/lowcode-designer';
 import { globalContext } from '@alilc/lowcode-editor-core';
 import {
@@ -14,8 +14,8 @@ import { pluginsSymbol } from '../symbols';
 
 const innerPluginsSymbol = Symbol('plugin');
 export class Plugins implements IPublicApiPlugins {
-  private readonly [innerPluginsSymbol]: LowCodePluginManager;
-  get [pluginsSymbol](): LowCodePluginManager {
+  private readonly [innerPluginsSymbol]: ILowCodePluginManager;
+  get [pluginsSymbol](): ILowCodePluginManager {
     if (this.workspaceMode) {
       return this[innerPluginsSymbol];
     }
@@ -27,7 +27,7 @@ export class Plugins implements IPublicApiPlugins {
     return this[innerPluginsSymbol];
   }
 
-  constructor(plugins: LowCodePluginManager, public workspaceMode: boolean = false) {
+  constructor(plugins: ILowCodePluginManager, public workspaceMode: boolean = false) {
     this[innerPluginsSymbol] = plugins;
   }
 
@@ -66,8 +66,8 @@ export class Plugins implements IPublicApiPlugins {
     return this[pluginsSymbol].has(pluginName);
   }
 
-  delete(pluginName: string) {
-    this[pluginsSymbol].delete(pluginName);
+  async delete(pluginName: string) {
+    return await this[pluginsSymbol].delete(pluginName);
   }
 
   toProxy() {

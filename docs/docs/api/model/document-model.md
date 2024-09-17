@@ -139,10 +139,12 @@ importSchema(schema: IPublicTypeRootSchema): void;
  * @param stage
  * @returns
  */
-exportSchema(stage: IPublicEnumTransformStage): any;
+exportSchema(stage: IPublicEnumTransformStage): IPublicTypeRootSchema | undefined;
 ```
 
-相关类型：[IPublicEnumTransformStage](https://github.com/alibaba/lowcode-engine/blob/main/packages/types/src/shell/enum/transform-stage.ts)
+相关类型：
+- [IPublicEnumTransformStage](https://github.com/alibaba/lowcode-engine/blob/main/packages/types/src/shell/enum/transform-stage.ts)
+- [IPublicTypeRootSchema](https://github.com/alibaba/lowcode-engine/blob/main/packages/types/src/shell/type/root-schema.ts)
 
 ### insertNode
 
@@ -220,7 +222,7 @@ checkNesting(
 **@since v1.0.16**
 
 ### isDetectingNode
-检查拖拽放置的目标节点是否可以放置该拖拽对象
+判断是否当前节点处于被探测状态
 
 ```typescript
 /**

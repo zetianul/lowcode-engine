@@ -1,8 +1,11 @@
-export interface IPublicModelDragObject {
+import { IPublicEnumDragObjectType } from '../enum';
+import { IPublicTypeNodeSchema } from '../type';
+import { IPublicModelNode } from './node';
 
-  get type(): any;
+export class IPublicModelDragObject {
+  type: IPublicEnumDragObjectType.Node | IPublicEnumDragObjectType.NodeData;
 
-  get nodes(): any;
+  data: IPublicTypeNodeSchema | IPublicTypeNodeSchema[] | null;
 
-  get data(): any;
+  nodes: (IPublicModelNode | null)[] | null;
 }

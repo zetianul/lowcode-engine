@@ -1,37 +1,59 @@
-import { Component } from 'react';
+import { PureComponent } from 'react';
 import classNames from 'classnames';
 import TreeNode from '../controllers/tree-node';
 import TreeTitle from './tree-title';
 import TreeBranches from './tree-branches';
 import { IconEyeClose } from '../icons/eye-close';
-import { IPublicModelPluginContext, IPublicModelModalNodesManager, IPublicModelDocumentModel } from '@alilc/lowcode-types';
+import { IPublicModelModalNodesManager, IPublicTypeDisposable } from '@alilc/lowcode-types';
+import { IOutlinePanelPluginContext } from '../controllers/tree-master';
 
-class ModalTreeNodeView extends Component<{
+class ModalTreeNodeView extends PureComponent<{
   treeNode: TreeNode;
-  pluginContext: IPublicModelPluginContext;
+}, {
+  treeChildren: TreeNode[] | null;
 }> {
   private modalNodesManager: IPublicModelModalNodesManager | undefined | null;
-  readonly pluginContext: IPublicModelPluginContext;
+  readonly pluginContext: IOutlinePanelPluginContext;
 
-  constructor(props: any) {
+  constructor(props: {
+    treeNode: TreeNode;
+  }) {
     super(props);
 
     // 模态管理对象
-    this.pluginContext = props.pluginContext;
+    this.pluginContext = props.treeNode.pluginContext;
     const { project } = this.pluginContext;
     this.modalNodesManager = project.currentDocument?.modalNodesManager;
+    this.state = {
+      treeChildren: this.rootTreeNode.children,
+    };
   }
 
   hideAllNodes() {
     this.modalNodesManager?.hideModalNodes();
   }
 
-  render() {
+  componentDidMount(): void {
+    const { rootTreeNode } = this;
+    rootTreeNode.onExpandableChanged(() => {
+      this.setState({
+        treeChildren: rootTreeNode.children,
+      });
+    });
+  }
+
+  get rootTreeNode() {
     const { treeNode } = this.props;
     // 当指定了新的根节点时，要从原始的根节点去获取模态节点
     const { project } = this.pluginContext;
     const rootNode = project.currentDocument?.root;
     const rootTreeNode = treeNode.tree.getTreeNode(rootNode!);
+
+    return rootTreeNode;
+  }
+
+  render() {
+    const { rootTreeNode } = this;
     const { expanded } = rootTreeNode;
 
     const hasVisibleModalNode = !!this.modalNodesManager?.getVisibleModalNode();
@@ -49,9 +71,9 @@ class ModalTreeNodeView extends Component<{
         <div className="tree-pane-modal-content">
           <TreeBranches
             treeNode={rootTreeNode}
+            treeChildren={this.state.treeChildren}
             expanded={expanded}
             isModal
-            pluginContext={this.pluginContext}
           />
         </div>
       </div>
@@ -59,13 +81,27 @@ class ModalTreeNodeView extends Component<{
   }
 }
 
-export default class TreeNodeView extends Component<{
+export default class TreeNodeView extends PureComponent<{
   treeNode: TreeNode;
   isModal?: boolean;
-  pluginContext: IPublicModelPluginContext;
-  isRootNode: boolean;
+  isRootNode?: boolean;
 }> {
-  state = {
+  state: {
+    expanded: boolean;
+    selected: boolean;
+    hidden: boolean;
+    locked: boolean;
+    detecting: boolean;
+    isRoot: boolean;
+    highlight: boolean;
+    dropping: boolean;
+    conditionFlow: boolean;
+    expandable: boolean;
+    treeChildren: TreeNode[] | null;
+    filterWorking: boolean;
+    matchChild: boolean;
+    matchSelf: boolean;
+  } = {
     expanded: false,
     selected: false,
     hidden: false,
@@ -76,9 +112,13 @@ export default class TreeNodeView extends Component<{
     dropping: false,
     conditionFlow: false,
     expandable: false,
+    treeChildren: [],
+    filterWorking: false,
+    matchChild: false,
+    matchSelf: false,
   };
 
-  eventOffCallbacks: Array<() => void> = [];
+  eventOffCallbacks: Array<IPublicTypeDisposable | undefined> = [];
   constructor(props: any) {
     super(props);
 
@@ -95,30 +135,37 @@ export default class TreeNodeView extends Component<{
       conditionFlow: treeNode.node.conditionGroup != null,
       highlight: treeNode.isFocusingNode(),
       expandable: treeNode.expandable,
+      treeChildren: treeNode.children,
     };
   }
 
   componentDidMount() {
-    const { treeNode, pluginContext } = this.props;
-    const { project } = pluginContext;
+    const { treeNode } = this.props;
+    const { project } = treeNode.pluginContext;
 
     const doc = project.currentDocument;
 
-    treeNode.onExpandedChanged = ((expanded: boolean) => {
+    treeNode.onExpandedChanged(((expanded: boolean) => {
       this.setState({ expanded });
-    });
-    treeNode.onHiddenChanged = (hidden: boolean) => {
+    }));
+    treeNode.onHiddenChanged((hidden: boolean) => {
       this.setState({ hidden });
-    };
-    treeNode.onLockedChanged = (locked: boolean) => {
+    });
+    treeNode.onLockedChanged((locked: boolean) => {
       this.setState({ locked });
-    };
-    treeNode.onExpandableChanged = (expandable: boolean) => {
-      this.setState({ expandable });
-    };
-
+    });
+    treeNode.onExpandableChanged((expandable: boolean) => {
+      this.setState({
+        expandable,
+        treeChildren: treeNode.children,
+      });
+    });
+    treeNode.onFilterResultChanged(() => {
+      const { filterWorking: newFilterWorking, matchChild: newMatchChild, matchSelf: newMatchSelf } = treeNode.filterReult;
+      this.setState({ filterWorking: newFilterWorking, matchChild: newMatchChild, matchSelf: newMatchSelf });
+    });
     this.eventOffCallbacks.push(
-      doc?.onDropLocationChanged((document: IPublicModelDocumentModel) => {
+      doc?.onDropLocationChanged(() => {
         this.setState({
           dropping: treeNode.dropDetail?.index != null,
         });
@@ -135,20 +182,20 @@ export default class TreeNodeView extends Component<{
     this.eventOffCallbacks.push(offDetectingChange!);
   }
   componentWillUnmount(): void {
-    this.eventOffCallbacks?.forEach((offFun: () => void) => {
-      offFun();
+    this.eventOffCallbacks?.forEach((offFun: IPublicTypeDisposable | undefined) => {
+      offFun && offFun();
     });
   }
 
   shouldShowModalTreeNode(): boolean {
-    const { treeNode, isRootNode, pluginContext } = this.props;
+    const { treeNode, isRootNode } = this.props;
     if (!isRootNode) {
       // 只在 当前树 的根节点展示模态节点
       return false;
     }
 
     // 当指定了新的根节点时，要从原始的根节点去获取模态节点
-    const { project } = pluginContext;
+    const { project } = treeNode.pluginContext;
     const rootNode = project.currentDocument?.root;
     const rootTreeNode = treeNode.tree.getTreeNode(rootNode!);
     const modalNodes = rootTreeNode.children?.filter((item) => {
@@ -179,7 +226,7 @@ export default class TreeNodeView extends Component<{
     let shouldShowModalTreeNode: boolean = this.shouldShowModalTreeNode();
 
     // filter 处理
-    const { filterWorking, matchChild, matchSelf } = treeNode.filterReult;
+    const { filterWorking, matchChild, matchSelf } = this.state;
     if (!isRootNode && filterWorking && !matchChild && !matchSelf) {
       // 条件过滤生效时，如果未命中本节点或子节点，则不展示该节点
       // 根节点始终展示
@@ -188,7 +235,7 @@ export default class TreeNodeView extends Component<{
     return (
       <div
         className={className}
-        data-id={treeNode.id}
+        data-id={treeNode.nodeId}
       >
         <TreeTitle
           treeNode={treeNode}
@@ -197,19 +244,17 @@ export default class TreeNodeView extends Component<{
           hidden={this.state.hidden}
           locked={this.state.locked}
           expandable={this.state.expandable}
-          pluginContext={this.props.pluginContext}
         />
         {shouldShowModalTreeNode &&
           <ModalTreeNodeView
             treeNode={treeNode}
-            pluginContext={this.props.pluginContext}
           />
         }
         <TreeBranches
           treeNode={treeNode}
           isModal={false}
           expanded={this.state.expanded}
-          pluginContext={this.props.pluginContext}
+          treeChildren={this.state.treeChildren}
         />
       </div>
     );

@@ -4,6 +4,7 @@ import { isPlainObject, isJSFunction, getLogger } from '@alilc/lowcode-utils';
 const leadingFnRe = /^function/;
 const leadingFnNameRe = /^\w+\s*\(/;
 const logger = getLogger({ level: 'warn', bizName: 'skeleton:transducers' });
+
 /**
  * 将函数字符串转成函数，支持几种类型
  *   类型一：() => {} / val => {}
@@ -25,7 +26,7 @@ function transformStringToFunction(str: string) {
       try {
         return (${str}).apply(self, arguments);
       } catch(e) {
-        logger.warn('call function which parsed by lowcode failed: ', e);
+        console.warn('call function which parsed by lowcode failed: ', e);
         return e.message;
       }
     };

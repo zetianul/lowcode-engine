@@ -15,7 +15,7 @@ export default function componentRendererFactory(): IBaseRenderComponent {
       const schema = props.__schema || {};
       this.state = this.__parseData(schema.state || {});
       this.__initDataSource(props);
-      this.__excuteLifeCycleMethod('constructor', arguments as any);
+      this.__executeLifeCycleMethod('constructor', arguments as any);
     }
 
     render() {
@@ -46,12 +46,5 @@ export default function componentRendererFactory(): IBaseRenderComponent {
 
       return this.__renderComp(Component, this.__renderContextProvider({ compContext: this }));
     }
-
-    /** 需要重载下面几个方法，如果在低代码组件中绑定了对应的生命周期时会出现死循环 */
-    componentDidMount() {}
-    getSnapshotBeforeUpdate() {}
-    componentDidUpdate() {}
-    componentWillUnmount() {}
-    componentDidCatch() {}
   };
 }

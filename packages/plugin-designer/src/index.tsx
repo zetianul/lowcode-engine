@@ -62,6 +62,21 @@ export default class DesignerPlugin extends PureComponent<PluginProps, DesignerP
       if (!this._mounted) {
         return;
       }
+      engineConfig.onGot('locale', (locale) => {
+        this.setState({
+          locale,
+        });
+      });
+      engineConfig.onGot('requestHandlersMap', (requestHandlersMap) => {
+        this.setState({
+          requestHandlersMap,
+        });
+      });
+      engineConfig.onGot('device', (device) => {
+        this.setState({
+          device,
+        });
+      });
       const { components, packages, extraEnvironment, utils } = assets;
       const state = {
         componentMetadatas: components || [],

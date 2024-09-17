@@ -44,7 +44,7 @@ const VALID_ENGINE_OPTIONS = {
   },
   renderEnv: {
     type: 'string',
-    enum: ['react', 'rax', 'any string value'],
+    enum: ['react', 'any string value'],
     default: 'react',
     description: '渲染器类型',
   },
@@ -124,9 +124,7 @@ const VALID_ENGINE_OPTIONS = {
     type: 'array',
     description: '自定义 simulatorUrl 的地址',
   },
-  /**
-   * 与 react-renderer 的 appHelper 一致，https://lowcode-engine.cn/site/docs/guide/expand/runtime/renderer#apphelper
-   */
+  // 与 react-renderer 的 appHelper 一致，https://lowcode-engine.cn/site/docs/guide/expand/runtime/renderer#apphelper
   appHelper: {
     type: 'object',
     description: '定义 utils 和 constants 等对象',
@@ -147,8 +145,31 @@ const VALID_ENGINE_OPTIONS = {
     type: 'function',
     description: '配置指定节点为根组件',
   },
+  enableAutoOpenFirstWindow: {
+    type: 'boolean',
+    description: '应用级设计模式下，自动打开第一个窗口',
+    default: true,
+  },
+  enableWorkspaceMode: {
+    type: 'boolean',
+    description: '是否开启应用级设计模式',
+    default: false,
+  },
+  workspaceEmptyComponent: {
+    type: 'function',
+    description: '应用级设计模式下，窗口为空时展示的占位组件',
+  },
+  enableContextMenu: {
+    type: 'boolean',
+    description: '是否开启右键菜单',
+    default: false,
+  },
+  hideComponentAction: {
+    type: 'boolean',
+    description: '是否隐藏设计器辅助层',
+    default: false,
+  },
 };
-
 
 const getStrictModeValue = (engineOptions: IPublicTypeEngineOptions, defaultValue: boolean): boolean => {
   if (!engineOptions || !isPlainObject(engineOptions)) {
@@ -161,7 +182,8 @@ const getStrictModeValue = (engineOptions: IPublicTypeEngineOptions, defaultValu
   return engineOptions.enableStrictPluginMode;
 };
 
-export interface IEngineConfigPrivate {
+export interface IEngineConfig extends IPublicModelEngineConfig {
+
   /**
    * if engineOptions.strictPluginMode === true, only accept propertied predefined in EngineOptions.
    *
@@ -176,8 +198,7 @@ export interface IEngineConfigPrivate {
   delWait(key: string, fn: any): void;
 }
 
-
-export class EngineConfig implements IPublicModelEngineConfig, IEngineConfigPrivate {
+export class EngineConfig implements IEngineConfig {
   private config: { [key: string]: any } = {};
 
   private waits = new Map<
@@ -291,13 +312,11 @@ export class EngineConfig implements IPublicModelEngineConfig, IEngineConfigPriv
     const val = this.config?.[key];
     if (val !== undefined) {
       fn(val);
-      return () => {};
-    } else {
-      this.setWait(key, fn);
-      return () => {
-        this.delWait(key, fn);
-      };
     }
+    this.setWait(key, fn);
+    return () => {
+      this.delWait(key, fn);
+    };
   }
 
   notifyGot(key: string): void {

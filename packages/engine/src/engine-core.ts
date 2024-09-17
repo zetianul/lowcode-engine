@@ -9,11 +9,18 @@ import {
   engineConfig,
   Setters as InnerSetters,
   Hotkey as InnerHotkey,
+  IEditor,
+  Command as InnerCommand,
 } from '@alilc/lowcode-editor-core';
 import {
   IPublicTypeEngineOptions,
   IPublicModelDocumentModel,
   IPublicTypePluginMeta,
+  IPublicTypeDisposable,
+  IPublicApiPlugins,
+  IPublicApiWorkspace,
+  IPublicEnumPluginRegisterLevel,
+  IPublicModelPluginContext,
 } from '@alilc/lowcode-types';
 import {
   Designer,
@@ -21,6 +28,7 @@ import {
   ILowCodePluginContextPrivate,
   ILowCodePluginContextApiAssembler,
   PluginPreference,
+  IDesigner,
 } from '@alilc/lowcode-designer';
 import {
   Skeleton as InnerSkeleton,
@@ -29,6 +37,7 @@ import {
 import {
   Workspace as InnerWorkspace,
   Workbench as WorkSpaceWorkbench,
+  IWorkspace,
 } from '@alilc/lowcode-workspace';
 
 import {
@@ -43,38 +52,60 @@ import {
   Logger,
   Canvas,
   Workspace,
+  Config,
+  CommonUI,
+  Command,
 } from '@alilc/lowcode-shell';
 import { isPlainObject } from '@alilc/lowcode-utils';
 import './modules/live-editing';
-import classes from './modules/classes';
+import * as classes from './modules/classes';
 import symbols from './modules/symbols';
 import { componentMetaParser } from './inner-plugins/component-meta-parser';
 import { setterRegistry } from './inner-plugins/setter-registry';
 import { defaultPanelRegistry } from './inner-plugins/default-panel-registry';
 import { shellModelFactory } from './modules/shell-model-factory';
 import { builtinHotkey } from './inner-plugins/builtin-hotkey';
+import { defaultContextMenu } from './inner-plugins/default-context-menu';
+import { CommandPlugin } from '@alilc/lowcode-plugin-command';
 import { OutlinePlugin } from '@alilc/lowcode-plugin-outline-pane';
 
 export * from './modules/skeleton-types';
 export * from './modules/designer-types';
 export * from './modules/lowcode-types';
 
-async function registryInnerPlugin(designer: Designer, editor: Editor, plugins: Plugins) {
+async function registryInnerPlugin(designer: IDesigner, editor: IEditor, plugins: IPublicApiPlugins): Promise<IPublicTypeDisposable> {
   // 注册一批内置插件
+  const componentMetaParserPlugin = componentMetaParser(designer);
+  const defaultPanelRegistryPlugin = defaultPanelRegistry(editor);
   await plugins.register(OutlinePlugin, {}, { autoInit: true });
-  await plugins.register(componentMetaParser(designer));
+  await plugins.register(componentMetaParserPlugin);
   await plugins.register(setterRegistry, {});
-  await plugins.register(defaultPanelRegistry(editor));
+  await plugins.register(defaultPanelRegistryPlugin);
   await plugins.register(builtinHotkey);
   await plugins.register(registerDefaults, {}, { autoInit: true });
+  await plugins.register(defaultContextMenu);
+  await plugins.register(CommandPlugin, {});
+
+  return () => {
+    plugins.delete(OutlinePlugin.pluginName);
+    plugins.delete(componentMetaParserPlugin.pluginName);
+    plugins.delete(setterRegistry.pluginName);
+    plugins.delete(defaultPanelRegistryPlugin.pluginName);
+    plugins.delete(builtinHotkey.pluginName);
+    plugins.delete(registerDefaults.pluginName);
+    plugins.delete(defaultContextMenu.pluginName);
+    plugins.delete(CommandPlugin.pluginName);
+  };
 }
 
-const innerWorkspace = new InnerWorkspace(registryInnerPlugin, shellModelFactory);
-const workspace = new Workspace(innerWorkspace);
+const innerWorkspace: IWorkspace = new InnerWorkspace(registryInnerPlugin, shellModelFactory);
+const workspace: IPublicApiWorkspace = new Workspace(innerWorkspace);
 const editor = new Editor();
 globalContext.register(editor, Editor);
 globalContext.register(editor, 'editor');
 globalContext.register(innerWorkspace, 'workspace');
+
+const engineContext: Partial<ILowCodePluginContextPrivate> = {};
 
 const innerSkeleton = new InnerSkeleton(editor);
 editor.set('skeleton' as any, innerSkeleton);
@@ -90,13 +121,16 @@ const project = new Project(innerProject);
 const skeleton = new Skeleton(innerSkeleton, 'any', false);
 const innerSetters = new InnerSetters();
 const setters = new Setters(innerSetters);
+const innerCommand = new InnerCommand();
+const command = new Command(innerCommand, engineContext as IPublicModelPluginContext);
 
 const material = new Material(editor);
+const commonUI = new CommonUI(editor);
 editor.set('project', project);
 editor.set('setters' as any, setters);
 editor.set('material', material);
 editor.set('innerHotkey', innerHotkey);
-const config = engineConfig;
+const config = new Config(engineConfig);
 const event = new Event(commonEvent, { prefix: 'common' });
 const logger = new Logger({ level: 'warn', bizName: 'common' });
 const common = new Common(editor, innerSkeleton);
@@ -112,12 +146,21 @@ const pluginContextApiAssembler: ILowCodePluginContextApiAssembler = {
     context.setters = setters;
     context.material = material;
     const eventPrefix = meta?.eventPrefix || 'common';
+    const commandScope = meta?.commandScope;
     context.event = new Event(commonEvent, { prefix: eventPrefix });
     context.config = config;
     context.common = common;
     context.canvas = canvas;
     context.plugins = plugins;
     context.logger = new Logger({ level: 'warn', bizName: `plugin:${pluginName}` });
+    context.workspace = workspace;
+    context.commonUI = commonUI;
+    context.command = new Command(innerCommand, context as IPublicModelPluginContext, {
+      commandScope,
+    });
+    context.registerLevel = IPublicEnumPluginRegisterLevel.Default;
+    context.isPluginRegisteredInWorkspace = false;
+    editor.set('pluginContext', context);
   },
 };
 
@@ -125,6 +168,20 @@ const innerPlugins = new LowCodePluginManager(pluginContextApiAssembler);
 plugins = new Plugins(innerPlugins).toProxy();
 editor.set('innerPlugins' as any, innerPlugins);
 editor.set('plugins' as any, plugins);
+
+engineContext.skeleton = skeleton;
+engineContext.plugins = plugins;
+engineContext.project = project;
+engineContext.setters = setters;
+engineContext.material = material;
+engineContext.event = event;
+engineContext.logger = logger;
+engineContext.hotkey = hotkey;
+engineContext.common = common;
+engineContext.workspace = workspace;
+engineContext.canvas = canvas;
+engineContext.commonUI = commonUI;
+engineContext.command = command;
 
 export {
   skeleton,
@@ -137,10 +194,10 @@ export {
   logger,
   hotkey,
   common,
-  // 兼容原 editor 的事件功能
-  event as editor,
   workspace,
   canvas,
+  commonUI,
+  command,
 };
 // declare this is open-source version
 export const isOpenSource = true;
@@ -156,7 +213,7 @@ let engineContainer: HTMLElement;
 export const version = VERSION_PLACEHOLDER;
 engineConfig.set('ENGINE_VERSION', version);
 
-registryInnerPlugin(designer, editor, plugins);
+const pluginPromise = registryInnerPlugin(designer, editor, plugins);
 
 export async function init(
   container?: HTMLElement,
@@ -181,10 +238,10 @@ export async function init(
   }
   engineConfig.setEngineOptions(engineOptions as any);
 
-  await plugins.init(pluginPreference as any);
-
   const { Workbench } = common.skeletonCabin;
   if (options && options.enableWorkspaceMode) {
+    const disposeFun = await pluginPromise;
+    disposeFun && disposeFun();
     render(
       createElement(WorkSpaceWorkbench, {
         workspace: innerWorkspace,
@@ -194,11 +251,15 @@ export async function init(
       }),
       engineContainer,
     );
+    innerWorkspace.enableAutoOpenFirstWindow = engineConfig.get('enableAutoOpenFirstWindow', true);
     innerWorkspace.setActive(true);
+    innerWorkspace.initWindow();
     innerHotkey.activate(false);
     await innerWorkspace.plugins.init(pluginPreference);
     return;
   }
+
+  await plugins.init(pluginPreference as any);
 
   render(
     createElement(Workbench, {

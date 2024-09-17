@@ -1,4 +1,4 @@
-import { IPublicTypeAssetsJson, IPublicTypeMetadataTransducer, IPublicTypeComponentAction, IPublicTypeNpmInfo, IPublicTypeDisposable } from '../type';
+import { IPublicTypeAssetsJson, IPublicTypeMetadataTransducer, IPublicTypeComponentAction, IPublicTypeNpmInfo, IPublicTypeDisposable, IPublicTypeContextMenuAction, IPublicTypeContextMenuItem } from '../type';
 import { IPublicModelComponentMeta } from '../model';
 import { ComponentType } from 'react';
 
@@ -15,14 +15,14 @@ export interface IPublicApiMaterial {
    * set data for Assets
    * @returns void
    */
-  setAssets(assets: IPublicTypeAssetsJson): void;
+  setAssets(assets: IPublicTypeAssetsJson): Promise<void>;
 
   /**
    * 获取「资产包」结构
    * get AssetsJson data
    * @returns IPublicTypeAssetsJson
    */
-  getAssets(): IPublicTypeAssetsJson;
+  getAssets(): IPublicTypeAssetsJson | undefined;
 
   /**
    * 加载增量的「资产包」结构，该增量包会与原有的合并
@@ -76,8 +76,25 @@ export interface IPublicApiMaterial {
 
   /**
    * 在设计器辅助层增加一个扩展 action
+   *
    * add an action button in canvas context menu area
    * @param action
+   * @example
+   * ```ts
+   * import { plugins } from '@alilc/lowcode-engine';
+   * import { IPublicModelPluginContext } from '@alilc/lowcode-types';
+   *
+   * const removeCopyAction = (ctx: IPublicModelPluginContext) => {
+   *   return {
+   *     async init() {
+   *       const { removeBuiltinComponentAction } = ctx.material;
+   *       removeBuiltinComponentAction('copy');
+   *     }
+   *   }
+   * };
+   * removeCopyAction.pluginName = 'removeCopyAction';
+   * await plugins.register(removeCopyAction);
+   * ```
    */
   addBuiltinComponentAction(action: IPublicTypeComponentAction): void;
 
@@ -105,4 +122,28 @@ export interface IPublicApiMaterial {
    * @param fn
    */
   onChangeAssets(fn: () => void): IPublicTypeDisposable;
+
+  /**
+   * 刷新 componentMetasMap，可触发模拟器里的 components 重新构建
+   * @since v1.1.7
+   */
+  refreshComponentMetasMap(): void;
+
+  /**
+   * 添加右键菜单项
+   * @param action
+   */
+  addContextMenuOption(action: IPublicTypeContextMenuAction): void;
+
+  /**
+   * 删除特定右键菜单项
+   * @param name
+   */
+  removeContextMenuOption(name: string): void;
+
+  /**
+   * 调整右键菜单项布局
+   * @param actions
+   */
+  adjustContextMenuLayout(fn: (actions: IPublicTypeContextMenuItem[]) => IPublicTypeContextMenuItem[]): void;
 }

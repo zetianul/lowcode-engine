@@ -11,9 +11,9 @@ import {
   IPublicModelSensor,
 } from '@alilc/lowcode-types';
 import { setNativeSelection, cursor } from '@alilc/lowcode-utils';
-import { Node } from '../document';
+import { INode, Node } from '../document';
 import { ISimulatorHost, isSimulatorHost } from '../simulator';
-import { Designer } from './designer';
+import { IDesigner } from './designer';
 import { makeEventsHandler } from '../utils/misc';
 
 export interface ILocateEvent extends IPublicModelLocateEvent {
@@ -23,7 +23,6 @@ export interface ILocateEvent extends IPublicModelLocateEvent {
    * 激活的感应器
    */
   sensor?: IPublicModelSensor;
-
 }
 
 /**
@@ -89,15 +88,18 @@ function getSourceSensor(dragObject: IPublicModelDragObject): ISimulatorHost | n
   if (!isDragNodeObject(dragObject)) {
     return null;
   }
-  return dragObject.nodes[0]?.document.simulator || null;
+  return dragObject.nodes[0]?.document?.simulator || null;
 }
 
 function isDragEvent(e: any): e is DragEvent {
   return e?.type?.startsWith('drag');
 }
 
-export interface IDragon extends IPublicModelDragon {
-
+export interface IDragon extends IPublicModelDragon<
+  INode,
+  ILocateEvent
+> {
+  emitter: IEventBus;
 }
 
 /**
@@ -105,6 +107,8 @@ export interface IDragon extends IPublicModelDragon {
  */
 export class Dragon implements IDragon {
   private sensors: IPublicModelSensor[] = [];
+
+  private nodeInstPointerEvents: boolean;
 
   key = Math.random();
 
@@ -127,9 +131,9 @@ export class Dragon implements IDragon {
 
   viewName: string | undefined;
 
-  private emitter: IEventBus = createModuleEventBus('Dragon');
+  emitter: IEventBus = createModuleEventBus('Dragon');
 
-  constructor(readonly designer: Designer) {
+  constructor(readonly designer: IDesigner) {
     makeObservable(this);
     this.viewName = designer.viewName;
   }
@@ -166,7 +170,7 @@ export class Dragon implements IDragon {
    * @param dragObject 拖拽对象
    * @param boostEvent 拖拽初始时事件
    */
-  boost(dragObject: IPublicModelDragObject, boostEvent: MouseEvent | DragEvent, fromRglNode?: Node | IPublicModelNode) {
+  boost(dragObject: IPublicModelDragObject, boostEvent: MouseEvent | DragEvent, fromRglNode?: INode | IPublicModelNode) {
     const { designer } = this;
     const masterSensors = this.getMasterSensors();
     const handleEvents = makeEventsHandler(boostEvent, masterSensors);
@@ -263,7 +267,7 @@ export class Dragon implements IDragon {
           this.emitter.emit('rgl.add.placeholder', {
             rglNode,
             fromRglNode,
-            node: locateEvent.dragObject.nodes[0],
+            node: locateEvent.dragObject?.nodes[0],
             event: e,
           });
           designer.clearLocation();
@@ -356,8 +360,8 @@ export class Dragon implements IDragon {
               rglNode,
               node: tarNode,
             });
-            const { selection } = designer.project.currentDocument;
-            selection.select(tarNode.id);
+            const selection = designer.project.currentDocument?.selection;
+            selection?.select(tarNode.id);
           }
         }
       }

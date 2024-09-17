@@ -1,6 +1,9 @@
+import { IPublicTypeI18nData } from '@alilc/lowcode-types';
+import { isObject } from '../is-object';
 
-// type checks
-
-export function isI18nData(obj: any): boolean {
-  return obj && obj.type === 'i18n';
+export function isI18nData(obj: any): obj is IPublicTypeI18nData {
+  if (!isObject(obj)) {
+    return false;
+  }
+  return obj.type === 'i18n';
 }

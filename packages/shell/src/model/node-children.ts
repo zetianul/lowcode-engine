@@ -130,11 +130,20 @@ export class NodeChildren implements IPublicModelNodeChildren {
   }
 
   /**
+   * 类似数组的 reverse
+   */
+  reverse(): IPublicModelNode[] {
+    return this[nodeChildrenSymbol].reverse().map(d => {
+      return ShellNode.create(d)!;
+    });
+  }
+
+  /**
    * 类似数组的 map
    * @param fn
    */
-  map<T>(fn: (node: IPublicModelNode, index: number) => T[]): any[] | null {
-    return this[nodeChildrenSymbol].map((item: InnerNode, index: number) => {
+  map<T = any>(fn: (node: IPublicModelNode, index: number) => T): T[] | null {
+    return this[nodeChildrenSymbol].map<T>((item: InnerNode, index: number): T => {
       return fn(ShellNode.create(item)!, index);
     });
   }

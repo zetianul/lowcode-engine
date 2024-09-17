@@ -1,26 +1,56 @@
 import { obx, computed, makeObservable, action, IEventBus, createModuleEventBus } from '@alilc/lowcode-editor-core';
 import { IDesigner } from '../designer';
-import { DocumentModel, IDocumentModel, isDocumentModel } from '../document';
-import {
+import { DocumentModel, isDocumentModel } from '../document';
+import type { IDocumentModel } from '../document';
+import { IPublicEnumTransformStage } from '@alilc/lowcode-types';
+import type {
+  IBaseApiProject,
   IPublicTypeProjectSchema,
   IPublicTypeRootSchema,
   IPublicTypeComponentsMap,
-  IPublicApiProject,
-  IPublicModelDocumentModel,
-  IPublicEnumTransformStage,
+  IPublicTypeSimulatorRenderer,
 } from '@alilc/lowcode-types';
 import { isLowCodeComponentType, isProCodeComponentType } from '@alilc/lowcode-utils';
 import { ISimulatorHost } from '../simulator';
 
-export interface IProject extends Omit< IPublicApiProject, 'simulatorHost' | 'importSchema' | 'exportSchema' | 'openDocument' | 'getDocumentById' | 'getCurrentDocument' | 'addPropsTransducer' | 'onRemoveDocument' | 'onChangeDocument' | 'onSimulatorHostReady' | 'onSimulatorRendererReady' | 'setI18n' > {
+export interface IProject extends Omit<IBaseApiProject<
+  IDocumentModel
+>,
+  'simulatorHost' |
+  'importSchema' |
+  'exportSchema' |
+  'openDocument' |
+  'getDocumentById' |
+  'getCurrentDocument' |
+  'addPropsTransducer' |
+  'onRemoveDocument' |
+  'onChangeDocument' |
+  'onSimulatorHostReady' |
+  'onSimulatorRendererReady' |
+  'setI18n' |
+  'setConfig' |
+  'currentDocument' |
+  'selection' |
+  'documents' |
+  'createDocument' |
+  'getDocumentByFileName'
+> {
 
   get designer(): IDesigner;
 
   get simulator(): ISimulatorHost | null;
 
-  get currentDocument(): IDocumentModel | null;
+  get currentDocument(): IDocumentModel | null | undefined;
 
   get documents(): IDocumentModel[];
+
+  get i18n(): {
+    [local: string]: {
+      [key: string]: any;
+    };
+  };
+
+  mountSimulator(simulator: ISimulatorHost): void;
 
   open(doc?: string | IDocumentModel | IPublicTypeRootSchema): IDocumentModel | null;
 
@@ -31,7 +61,7 @@ export interface IProject extends Omit< IPublicApiProject, 'simulatorHost' | 'im
   load(schema?: IPublicTypeProjectSchema, autoOpen?: boolean | string): void;
 
   getSchema(
-    stage: IPublicEnumTransformStage,
+    stage?: IPublicEnumTransformStage,
   ): IPublicTypeProjectSchema;
 
   getDocument(id: string): IDocumentModel | null;
@@ -45,21 +75,19 @@ export interface IProject extends Omit< IPublicApiProject, 'simulatorHost' | 'im
   /**
    * 分字段设置储存数据，不记录操作记录
    */
-  set(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    key:
-      | 'version'
-      | 'componentsTree'
-      | 'componentsMap'
-      | 'utils'
-      | 'constants'
-      | 'i18n'
-      | 'css'
-      | 'dataSource'
-      | string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    value: any,
-  ): void;
+  set<T extends keyof IPublicTypeProjectSchema>(key: T, value: IPublicTypeProjectSchema[T]): void;
+  set(key: string, value: unknown): void;
+
+  /**
+   * 分字段获取储存数据
+   */
+  get<T extends keyof IPublicTypeProjectSchema>(key: T): IPublicTypeProjectSchema[T];
+  get<T>(key: string): T;
+  get(key: string): unknown;
+
+  checkExclusive(activeDoc: DocumentModel): void;
+
+  setRendererReady(renderer: IPublicTypeSimulatorRenderer<any, any>): void;
 }
 
 export class Project implements IProject {
@@ -85,7 +113,7 @@ export class Project implements IProject {
     return this._simulator || null;
   }
 
-  @computed get currentDocument(): IDocumentModel | null {
+  @computed get currentDocument(): IDocumentModel | null | undefined {
     return this.documents.find((doc) => doc.active);
   }
 
@@ -114,14 +142,14 @@ export class Project implements IProject {
   }
 
   private getComponentsMap(): IPublicTypeComponentsMap {
-    return this.documents.reduce((
-      compomentsMap: IPublicTypeComponentsMap,
-      curDoc: DocumentModel,
-      ) => {
+    return this.documents.reduce<IPublicTypeComponentsMap>((
+      componentsMap: IPublicTypeComponentsMap,
+      curDoc: IDocumentModel,
+    ): IPublicTypeComponentsMap => {
       const curComponentsMap = curDoc.getComponentsMap();
       if (Array.isArray(curComponentsMap)) {
         curComponentsMap.forEach((item) => {
-          const found = compomentsMap.find((eItem) => {
+          const found = componentsMap.find((eItem) => {
             if (
               isProCodeComponentType(eItem) &&
               isProCodeComponentType(item) &&
@@ -138,10 +166,10 @@ export class Project implements IProject {
             return false;
           });
           if (found) return;
-          compomentsMap.push(item);
+          componentsMap.push(item);
         });
       }
-      return compomentsMap;
+      return componentsMap;
     }, [] as IPublicTypeComponentsMap);
   }
 
@@ -149,14 +177,14 @@ export class Project implements IProject {
    * 获取项目整体 schema
    */
   getSchema(
-      stage: IPublicEnumTransformStage = IPublicEnumTransformStage.Save,
-    ): IPublicTypeProjectSchema {
+    stage: IPublicEnumTransformStage = IPublicEnumTransformStage.Save,
+  ): IPublicTypeProjectSchema {
     return {
       ...this.data,
       componentsMap: this.getComponentsMap(),
       componentsTree: this.documents
         .filter((doc) => !doc.isBlank())
-        .map((doc) => doc.export(stage)),
+        .map((doc) => doc.export(stage) || {} as IPublicTypeRootSchema),
       i18n: this.i18n,
     };
   }
@@ -168,7 +196,7 @@ export class Project implements IProject {
   setSchema(schema?: IPublicTypeProjectSchema) {
     // FIXME: 这里的行为和 getSchema 并不对等，感觉不太对
     const doc = this.documents.find((doc) => doc.active);
-    doc && doc.import(schema?.componentsTree[0]);
+    doc && schema?.componentsTree[0] && doc.import(schema?.componentsTree[0]);
     this.simulator?.rerender();
   }
 
@@ -224,7 +252,7 @@ export class Project implements IProject {
     }
   }
 
-  removeDocument(doc: IPublicModelDocumentModel) {
+  removeDocument(doc: IDocumentModel) {
     const index = this.documents.indexOf(doc);
     if (index < 0) {
       return;
@@ -236,21 +264,9 @@ export class Project implements IProject {
   /**
    * 分字段设置储存数据，不记录操作记录
    */
-  set(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    key:
-      | 'version'
-      | 'componentsTree'
-      | 'componentsMap'
-      | 'utils'
-      | 'constants'
-      | 'i18n'
-      | 'css'
-      | 'dataSource'
-      | string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    value: any,
-  ): void {
+  set<T extends keyof IPublicTypeProjectSchema>(key: T, value: IPublicTypeProjectSchema[T]): void;
+  set(key: string, value: unknown): void;
+  set(key: string, value: unknown): void {
     if (key === 'config') {
       this.config = value;
     }
@@ -263,20 +279,10 @@ export class Project implements IProject {
   /**
    * 分字段设置储存数据
    */
-  get(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    key:
-      | 'version'
-      | 'componentsTree'
-      | 'componentsMap'
-      | 'utils'
-      | 'constants'
-      | 'i18n'
-      | 'css'
-      | 'dataSource'
-      | 'config'
-      | string,
-  ): any {
+  get<T extends keyof IPublicTypeRootSchema>(key: T): IPublicTypeRootSchema[T];
+  get<T>(key: string): T;
+  get(key: string): unknown;
+  get(key: string): any {
     if (key === 'config') {
       return this.config;
     }
@@ -312,13 +318,13 @@ export class Project implements IProject {
       doc = this.createDocument();
       return doc.open();
     }
-    if (typeof doc === 'string') {
-      const got = this.documents.find((item) => item.fileName === doc || item.id === doc);
+    if (typeof doc === 'string' || typeof doc === 'number') {
+      const got = this.documents.find((item) => item.fileName === String(doc) || String(item.id) === String(doc));
       if (got) {
         return got.open();
       }
 
-      const data = this.data.componentsTree.find((data) => data.fileName === doc);
+      const data = this.data.componentsTree.find((data) => data.fileName === String(doc));
       if (data) {
         doc = this.createDocument(data);
         return doc.open();

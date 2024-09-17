@@ -170,7 +170,9 @@ class Renderer extends Component<{
     this.startTime = Date.now();
     this.schemaChangedSymbol = false;
 
-    if (!container.autoRender || isRendererDetached()) return null;
+    if (!container.autoRender || isRendererDetached()) {
+      return null;
+    }
 
     const { intl } = createIntl(locale);
 
@@ -193,6 +195,7 @@ class Renderer extends Component<{
         thisRequiredInJSE={host.thisRequiredInJSE}
         notFoundComponent={host.notFoundComponent}
         faultComponent={host.faultComponent}
+        faultComponentMap={host.faultComponentMap}
         customCreateElement={(Component: any, props: any, children: any) => {
           const { __id, ...viewProps } = props;
           viewProps.componentId = __id;
